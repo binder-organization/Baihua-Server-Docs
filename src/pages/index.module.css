@@ -1,0 +1,38 @@
+.quickStartPreview {
+  padding: 4rem 0;
+  text-align: center;
+  background: var(--ifm-color-primary-lightest);
+}
+
+[data-theme='dark'] .quickStartPreview {
+  background: var(--ifm-color-primary-darkest);
+}
+
+.quickStartPreview h2 {
+  margin-bottom: 1rem;
+}
+
+.quickStartPreview p {
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  opacity: 0.8;
+}
+
+.codeBlock {
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  text-align: left;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.codeBlock pre {
+  margin: 0;
+  padding: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  background: #1a1d1c;
+  color: #e0e0e0;
+  border-radius: 8px;
+}

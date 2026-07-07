@@ -1,0 +1,42 @@
+{
+  "link.title.Docs": {
+    "message": "文档",
+    "description": "The title of the footer links column with title=Docs in the footer"
+  },
+  "link.title.Community": {
+    "message": "社区",
+    "description": "The title of the footer links column with title=Community in the footer"
+  },
+  "link.title.More": {
+    "message": "更多",
+    "description": "The title of the footer links column with title=More in the footer"
+  },
+  "link.item.label.Overview": {
+    "message": "概览",
+    "description": "The label of footer link with label=Overview linking to /docs/overview"
+  },
+  "link.item.label.Quick Start": {
+    "message": "快速启动",
+    "description": "The label of footer link with label=Quick Start linking to /docs/quick-start"
+  },
+  "link.item.label.API Reference": {
+    "message": "API 文档",
+    "description": "The label of footer link with label=API Reference linking to /docs/apiv1/TEMPLATE"
+  },
+  "link.item.label.GitHub Issues": {
+    "message": "GitHub Issues",
+    "description": "The label of footer link with label=GitHub Issues linking to https://github.com/Binder-organize/Baihua-Server/issues"
+  },
+  "link.item.label.Changelog": {
+    "message": "更新日志",
+    "description": "The label of footer link with label=Changelog linking to /docs/changelog"
+  },
+  "link.item.label.Contributing": {
+    "message": "贡献指南",
+    "description": "The label of footer link with label=Contributing linking to /docs/contributing"
+  },
+  "copyright": {
+    "message": "版权所有 © 2026 Gavin Zheng. 使用 Docusaurus 构建。",
+    "description": "The footer copyright"
+  }
+}

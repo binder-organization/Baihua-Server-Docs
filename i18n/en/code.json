@@ -1,0 +1,62 @@
+{
+  "homepage.metaDescription": {
+    "message": "Baihua - A team communication tool customized for developers. A Rust-based team communication tool integrating Git, GitHub, and CI/CD workflows.",
+    "description": "Homepage meta description"
+  },
+  "homepage.title": {
+    "message": "Baihua",
+    "description": "Homepage hero title"
+  },
+  "homepage.tagline": {
+    "message": "A team communication tool customized for developers.",
+    "description": "Homepage hero tagline"
+  },
+  "homepage.quickStart": {
+    "message": "Quick Start",
+    "description": "Homepage hero Quick Start button"
+  },
+  "homepage.learnMore": {
+    "message": "Learn More",
+    "description": "Homepage hero Learn More button"
+  },
+  "homepage.quickStartTitle": {
+    "message": "Get Started in Minutes",
+    "description": "Homepage Quick Start section title"
+  },
+  "homepage.quickStartDesc": {
+    "message": "Baihua is a team communication tool customized for developers, built with Rust. Get your server running with just a few commands.",
+    "description": "Homepage Quick Start section description"
+  },
+  "homepage.viewGuide": {
+    "message": "View Full Quick Start Guide →",
+    "description": "Homepage link to full Quick Start guide"
+  },
+  "homepage.designPhilosophy": {
+    "message": "Design Philosophy",
+    "description": "Homepage Design Philosophy section title"
+  },
+  "homepage.feature.coreFirst.title": {
+    "message": "Core-First",
+    "description": "Feature card title: Core-First"
+  },
+  "homepage.feature.coreFirst.desc": {
+    "message": "We prioritize building a stable, powerful, and scalable backend service, ensuring all business logic and data management meet production-grade standards.",
+    "description": "Feature card description: Core-First"
+  },
+  "homepage.feature.apiDriven.title": {
+    "message": "API-Driven",
+    "description": "Feature card title: API-Driven"
+  },
+  "homepage.feature.apiDriven.desc": {
+    "message": "All functionalities are exposed through clear APIs. This provides ultimate flexibility for integration and any form of future client development.",
+    "description": "Feature card description: API-Driven"
+  },
+  "homepage.feature.transparent.title": {
+    "message": "Transparent & Explainable",
+    "description": "Feature card title: Transparent & Explainable"
+  },
+  "homepage.feature.transparent.desc": {
+    "message": "Any automated operation must be fully explainable and traceable. We ensure that \"what happened\" and \"why it happened\" are completely transparent to developers.",
+    "description": "Feature card description: Transparent & Explainable"
+  }
+}
