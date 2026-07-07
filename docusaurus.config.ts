@@ -8,11 +8,11 @@ const config: Config = {
 
   // Set the production url of your site here
   url: 'https://binder2025.github.io',
-  baseUrl: '/',
+  baseUrl: '/Baihua-Server-Docs/',
 
   // GitHub pages deployment config
   organizationName: 'Binder-organize',
-  projectName: 'Baihua-Server',
+  projectName: 'Baihua-Server-Docs',
 
   onBrokenLinks: 'warn',
   onBrokenAnchors: 'warn',
