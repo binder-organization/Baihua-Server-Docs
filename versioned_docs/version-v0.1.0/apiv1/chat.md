@@ -176,6 +176,19 @@ Create a chat room. The behavior depends on the `is_group` field:
 
 #### Errors
 
+**Target username is required (private room)**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Target username is required for private chat.",
+  "data": null
+}
+```
+
 **Target user not found (private room)**
 
 - HTTP Status: `400 Bad Request`

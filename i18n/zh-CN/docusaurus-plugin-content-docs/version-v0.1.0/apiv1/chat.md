@@ -176,6 +176,19 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 
 #### 错误响应
 
+**缺少目标用户名（私密聊天室）**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Target username is required for private chat.",
+  "data": null
+}
+```
+
 **目标用户不存在（私密聊天室）**
 
 - HTTP 状态码：`400 Bad Request`

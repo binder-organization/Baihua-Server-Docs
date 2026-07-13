@@ -176,6 +176,19 @@ Create a chat room. The behavior depends on the `is_group` field:
 
 #### Errors
 
+**Target username is required (private room)**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Target username is required for private chat.",
+  "data": null
+}
+```
+
 **Target user not found (private room)**
 
 - HTTP Status: `400 Bad Request`
@@ -1038,3 +1051,297 @@ When `has_more` is `false` or `next_cursor` is `null`, there are no more message
 
 - Source: `src/chat/message.rs`
 - Messages are returned in **descending** order (newest first)
+
+---
+
+## Real-time Events
+
+The chat system uses WebSocket for real-time push. After connecting, the server pushes events such as new messages, typing indicators, and user online/offline notifications.
+
+### Connection
+
+#### WebSocket Authentication
+
+The WebSocket endpoint requires JWT authentication via query parameter (different from the HTTP API's `Authorization` header).
+
+```http
+GET /websocket?token=<jwt_token>
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | Yes | JWT obtained via `POST /api/v1/user/login` |
+
+**Authentication Error Responses**
+
+If authentication fails, the server responds before the WebSocket upgrade occurs:
+
+- HTTP Status: `401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "AUTHENTICATION_ERROR",
+  "message": "Invalid token.",
+  "data": null
+}
+```
+
+| `error_code` | Condition |
+|---|---|
+| `AUTHENTICATION_ERROR` | Token is invalid or expired |
+| `AUTHENTICATION_ERROR` | JWT sub claim is not a valid UUID |
+| `AUTHENTICATION_ERROR` | User not found or inactive |
+
+##### Notes
+
+- Source: `src/websocket/handler.rs`
+- The connection is upgraded only after JWT validation and user lookup succeed
+
+#### GET /websocket
+
+Establish a WebSocket connection. On success, the client receives a `connected` event and is automatically subscribed to all rooms it is a member of.
+
+**Request:** No request body.
+
+**Response:** The connection is upgraded to a WebSocket. All subsequent communication uses JSON messages over the WebSocket connection.
+
+**Connected Confirmation**
+
+Immediately after a successful upgrade, the server sends:
+
+```json
+{
+  "type": "connected",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "rooms": [
+      "019ef520-0c59-7902-9959-86975c24af39",
+      "019ef530-0c59-7902-9959-86975c24af39"
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.user_id` | string (UUID v7) | Authenticated user ID |
+| `data.rooms` | array[string] | Room IDs the user is subscribed to |
+
+**User Online Broadcast**
+
+If this is the user's first active connection (supporting multiple devices), the server broadcasts to all subscribed rooms:
+
+```json
+{
+  "type": "user_online",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice"
+  }
+}
+```
+
+##### Notes
+
+- Source: `src/websocket/handler.rs`
+- The server sends WebSocket protocol-level `PING` frames every 30 seconds to detect dead connections; the client library automatically responds with `PONG` at the protocol level, no application code needed
+- Multiple connections from the same user are supported; `user_online` is broadcast only on the **first** connection, and `user_offline` only after the **last** connection is closed
+
+### Client Messages
+
+The client sends JSON messages to the server with a `type` field.
+
+#### typing
+
+Broadcast a typing indicator to all members of a room.
+
+```json
+{
+  "type": "typing",
+  "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `room_id` | string (UUID v7) | Yes | Room to notify |
+
+The server broadcasts the following to the room:
+
+```json
+{
+  "type": "typing",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice",
+    "typing": true
+  }
+}
+```
+
+**Error: Missing or invalid room_id**
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Missing 'room_id' in typing."
+  }
+}
+```
+
+#### pong (legacy)
+
+Heartbeat is now handled automatically at the WebSocket protocol level (the server sends `PING` frames every 30 seconds). Sending `{"type": "pong"}` as an application message is no longer necessary but remains accepted for backward compatibility.
+
+#### Unknown Message Type
+
+If the `type` field does not match any known message type, the server returns:
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Unknown WS message type: 'unknown_type'."
+  }
+}
+```
+
+### Server Messages
+
+The server pushes JSON messages to the client without a preceding client request.
+
+#### new_message
+
+Broadcast when a new message is sent via `POST /api/v1/chat/rooms/{room_id}/messages`. All members subscribed to the room receive this event.
+
+```json
+{
+  "type": "new_message",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string (UUID v7) | Unique message identifier |
+| `data.room_id` | string (UUID v7) | Room this message belongs to |
+| `data.sender_id` | string (UUID v7) | Sender's user ID |
+| `data.content` | string | Message content |
+| `data.created_at` | string (RFC 3339) | Message timestamp |
+
+#### user_online
+
+Broadcast to all members of a room when a user comes online (first connection).
+
+```json
+{
+  "type": "user_online",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.user_id` | string (UUID v7) | User who came online |
+| `data.username` | string | Username |
+
+#### user_offline
+
+Broadcast to all members of a room when a user goes fully offline (last connection closed).
+
+```json
+{
+  "type": "user_offline",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.user_id` | string (UUID v7) | User who went offline |
+| `data.username` | string | Username |
+
+#### typing
+
+Broadcast to all members of a room when a user is typing. See [typing](#typing-1) in Client Messages above.
+
+```json
+{
+  "type": "typing",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice",
+    "typing": true
+  }
+}
+```
+
+#### error
+
+Returned when a client message is invalid.
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Human-readable error description."
+  }
+}
+```
+
+### Disconnection
+
+When a WebSocket connection is closed (client disconnect, network failure, or server shutdown):
+
+1. The server decrements the user's connection counter
+2. If no more connections remain for that user, a `user_offline` event is broadcast to all subscribed rooms
+
+#### Notes
+
+- Source: `src/websocket/handler.rs`
+- Subscription forward tasks are automatically cleaned up when the connection drops
+- There is no reconnection mechanism on the server side; the client must re-establish the connection
+
+### Message Format Summary
+
+All messages are JSON with a `type` string discriminator and a `data` object.
+
+**Client to Server**
+
+| Type | Description |
+|---|---|
+| `typing` | Signal typing in a room |
+| `pong` | Heartbeat (legacy — handled at protocol level by server PING) |
+
+**Server to Client**
+
+| Type | Description |
+|---|---|
+| `connected` | Connection successfully established |
+| `new_message` | New message in a subscribed room |
+| `user_online` | User came online |
+| `user_offline` | User went offline |
+| `typing` | User is typing in a room |
+| `error` | Invalid client message |
+
+#### Notes
+
+- Source: `src/websocket/handler.rs` (constants and message types)
+- Source: `src/websocket/connection.rs` (connection manager implementation)
+- Source: `src/chat/message.rs` (new_message broadcast on message send)

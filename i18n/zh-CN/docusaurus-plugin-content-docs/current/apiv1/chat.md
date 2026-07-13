@@ -176,6 +176,19 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 
 #### 错误响应
 
+**缺少目标用户名（私密聊天室）**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Target username is required for private chat.",
+  "data": null
+}
+```
+
 **目标用户不存在（私密聊天室）**
 
 - HTTP 状态码：`400 Bad Request`
@@ -1038,3 +1051,297 @@ GET /api/v1/chat/rooms/{room_id}/messages?limit=50&before={next_cursor}
 
 - 源码位置：`src/chat/message.rs`
 - 消息按创建时间**倒序**返回（最新的在前）
+
+---
+
+## 实时事件
+
+聊天系统通过 WebSocket 实现实时推送。连接建立后，服务端会推送新消息、输入提示、用户上线/离线等事件。
+
+### 连接
+
+#### WebSocket 认证
+
+WebSocket 接口需要通过在查询参数中传递 JWT Token 进行认证（与 HTTP API 的 `Authorization` 请求头方式不同）。
+
+```http
+GET /websocket?token=<jwt_token>
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `token` | string | 是 | 通过 `POST /api/v1/user/login` 获取的 JWT Token |
+
+**认证错误响应**
+
+认证失败时，服务端会在 WebSocket 升级前返回错误：
+
+- HTTP 状态码：`401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "AUTHENTICATION_ERROR",
+  "message": "Invalid token.",
+  "data": null
+}
+```
+
+| `error_code` | 条件 |
+|---|---|
+| `AUTHENTICATION_ERROR` | Token 无效或已过期 |
+| `AUTHENTICATION_ERROR` | JWT sub 声明不是合法的 UUID |
+| `AUTHENTICATION_ERROR` | 用户不存在或已停用 |
+
+##### 说明
+
+- 源码位置：`src/websocket/handler.rs`
+- 只有在 JWT 验证和用户查询成功后，才会升级 WebSocket 连接
+
+#### GET /websocket
+
+建立 WebSocket 连接。连接成功后，客户端会收到 `connected` 事件，并自动订阅用户所属的所有聊天室。
+
+**请求：** 无请求体。
+
+**响应：** HTTP 连接升级为 WebSocket。之后的所有通信都通过 WebSocket 连接以 JSON 消息形式进行。
+
+**连接成功确认**
+
+升级成功后，服务端立即发送：
+
+```json
+{
+  "type": "connected",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "rooms": [
+      "019ef520-0c59-7902-9959-86975c24af39",
+      "019ef530-0c59-7902-9959-86975c24af39"
+    ]
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `data.user_id` | string (UUID v7) | 已认证的用户 ID |
+| `data.rooms` | array[string] | 用户已订阅的聊天室 ID 列表 |
+
+**用户上线广播**
+
+如果这是用户的第一个活跃连接（支持多设备），服务端会向所有已订阅聊天室广播：
+
+```json
+{
+  "type": "user_online",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice"
+  }
+}
+```
+
+##### 说明
+
+- 源码位置：`src/websocket/handler.rs`
+- 服务端每 30 秒发送 WebSocket 协议层的 `PING` 帧来检测死连接；客户端库会自动回复协议层的 `PONG`，无需应用层代码
+- 同一用户支持多个连接；`user_online` 仅在**第一个**连接建立时广播，`user_offline` 仅在**最后一个**连接关闭后广播
+
+### 客户端消息
+
+客户端通过 WebSocket 发送带有 `type` 字段的 JSON 消息。
+
+#### typing
+
+向聊天室所有成员广播输入状态。
+
+```json
+{
+  "type": "typing",
+  "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `room_id` | string (UUID v7) | 是 | 要通知的聊天室 ID |
+
+服务端会向该聊天室广播：
+
+```json
+{
+  "type": "typing",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice",
+    "typing": true
+  }
+}
+```
+
+**错误响应：缺少或无效的 room_id**
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Missing 'room_id' in typing."
+  }
+}
+```
+
+#### pong（旧版）
+
+心跳已由 WebSocket 协议层自动处理（服务端每 30 秒发送 `PING` 帧）。客户端已无需发送 `{"type": "pong"}` 应用消息，但为了向后兼容，服务端仍会接受此消息。
+
+#### 未知消息类型
+
+如果 `type` 字段与任何已知消息类型不匹配，服务端返回：
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Unknown WS message type: 'unknown_type'."
+  }
+}
+```
+
+### 服务端消息
+
+服务端在无需客户端请求的情况下主动推送 JSON 消息。
+
+#### new_message
+
+当通过 `POST /api/v1/chat/rooms/{room_id}/messages` 发送新消息时广播。所有订阅了该聊天室的成员都会收到此事件。
+
+```json
+{
+  "type": "new_message",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `data.id` | string (UUID v7) | 消息唯一标识 |
+| `data.room_id` | string (UUID v7) | 消息所属聊天室 ID |
+| `data.sender_id` | string (UUID v7) | 发送者用户 ID |
+| `data.content` | string | 消息内容 |
+| `data.created_at` | string (RFC 3339) | 消息时间戳 |
+
+#### user_online
+
+当用户上线（第一个连接建立）时向聊天室所有成员广播。
+
+```json
+{
+  "type": "user_online",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `data.user_id` | string (UUID v7) | 上线的用户 ID |
+| `data.username` | string | 用户名 |
+
+#### user_offline
+
+当用户完全离线（最后一个连接关闭）时向聊天室所有成员广播。
+
+```json
+{
+  "type": "user_offline",
+  "data": {
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `data.user_id` | string (UUID v7) | 离线的用户 ID |
+| `data.username` | string | 用户名 |
+
+#### typing
+
+当用户正在输入时向聊天室所有成员广播。详见上方客户端消息的 [typing](#typing-1) 章节。
+
+```json
+{
+  "type": "typing",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "username": "alice",
+    "typing": true
+  }
+}
+```
+
+#### error
+
+客户端消息不合法时返回。
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Human-readable error description."
+  }
+}
+```
+
+### 断开连接
+
+当 WebSocket 连接关闭时（客户端断开、网络故障或服务端关闭）：
+
+1. 服务端递减用户的连接计数器
+2. 如果该用户没有任何剩余连接，向所有已订阅聊天室广播 `user_offline` 事件
+
+#### 说明
+
+- 源码位置：`src/websocket/handler.rs`
+- 连接断开时，订阅转发任务会自动清理
+- 服务端不提供自动重连机制，客户端需要重新建立连接
+
+### 消息格式汇总
+
+所有消息均为 JSON 格式，通过 `type` 字符串字段区分消息类型，`data` 对象承载具体数据。
+
+**客户端 → 服务端**
+
+| Type | 说明 |
+|---|---|
+| `typing` | 发送输入状态 |
+| `pong` | 心跳（旧版 — 已由服务端 PING 在协议层处理） |
+
+**服务端 → 客户端**
+
+| Type | 说明 |
+|---|---|
+| `connected` | 连接成功建立 |
+| `new_message` | 订阅的聊天室有新消息 |
+| `user_online` | 用户上线 |
+| `user_offline` | 用户离线 |
+| `typing` | 用户在聊天室中输入 |
+| `error` | 客户端消息不合法 |
+
+#### 说明
+
+- 源码位置：`src/websocket/handler.rs`（消息常量与类型定义）
+- 源码位置：`src/websocket/connection.rs`（连接管理器实现）
+- 源码位置：`src/chat/message.rs`（发送消息时广播 new_message）

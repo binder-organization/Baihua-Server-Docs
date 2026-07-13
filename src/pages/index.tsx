@@ -22,12 +22,12 @@ function HomepageHeader() {
         <div className="hero__actions">
           <Link
             className="button button--secondary button--lg"
-            to="/docs/v0.1.0/quick-start">
+            to="/docs/v0.1.1/quick-start">
             <Translate id="homepage.quickStart">Quick Start</Translate>
           </Link>
           <Link
             className="button button--outline button--lg"
-            to="/docs/v0.1.0/overview"
+            to="/docs/v0.1.1/overview"
             style={{
               borderColor: 'rgba(255,255,255,0.5)',
               color: '#ffffff',
@@ -64,7 +64,7 @@ cargo run`}</code>
         </div>
         <Link
           className="button button--primary button--lg"
-          to="/docs/v0.1.0/quick-start">
+          to="/docs/v0.1.1/quick-start">
           <Translate id="homepage.viewGuide">View Full Quick Start Guide →</Translate>
         </Link>
       </div>

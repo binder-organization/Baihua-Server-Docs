@@ -41,11 +41,24 @@ Rate limiting is applied to authentication endpoints to prevent abuse:
 
 When the limit is exceeded, the server returns `429 Too Many Requests`:
 
+**Login rate limited**
+
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
   "error_code": "RATE_LIMIT_ERROR",
   "message": "Too many login attempts. Please try again later.",
+  "data": null
+}
+```
+
+**Registration rate limited**
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "RATE_LIMIT_ERROR",
+  "message": "Too many registration attempts. Please try again later.",
   "data": null
 }
 ```
@@ -161,13 +174,16 @@ Create a new user account.
 
 Other possible validation error messages:
 
-| Message | Condition |
-|---|---|
-| `Username, email, and password cannot be empty.` | Any required field is empty |
-| `Invalid email format. Please provide a valid email address.` | Email format is invalid |
-| `Email address is too long (maximum 254 characters).` | Email exceeds 254 characters |
-| `Username must be between 4 and 40 characters long.` | Username length is out of range |
-| `Email cannot be 'gav.zheng@outlook.com'.` | Reserved email used |
+| Message | Condition | Origin |
+|---|---|---|
+| `username is required.` | `username` field is missing or empty | Validation middleware |
+| `email is required.` | `email` field is missing or empty | Validation middleware |
+| `password is required.` | `password` field is missing or empty | Validation middleware |
+| `Username, email, and password cannot be empty.` | Any required field is empty | Business logic |
+| `Invalid email format. Please provide a valid email address.` | Email format is invalid | Business logic |
+| `Email address is too long (maximum 254 characters).` | Email exceeds 254 characters | Business logic |
+| `Username must be between 4 and 40 characters long.` | Username length is out of range | Business logic |
+| `Email cannot be 'gav.zheng@outlook.com'.` | Reserved email used | Business logic |
 
 ### Notes
 
@@ -250,6 +266,32 @@ Authenticate a user and receive a JWT token.
 **Production behavior:** The token is **never** written to logs.
 
 #### Errors
+
+**username is required**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "username is required.",
+  "data": null
+}
+```
+
+**password is required**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "password is required.",
+  "data": null
+}
+```
 
 **Invalid username or password**
 

@@ -54,8 +54,8 @@ npm run serve
 
 # Quick smoke test
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/docs/v0.1.0/overview
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/zh-CN/docs/v0.1.0/overview
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/docs/v0.1.1/overview
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/zh-CN/docs/v0.1.1/overview
 
 # Type check
 npm run typecheck
@@ -63,7 +63,7 @@ npm run typecheck
 
 ## Versioning
 
-Current published version: `v0.1.0`.
+Current published version: `v0.1.1`.
 
 To freeze a new version:
 

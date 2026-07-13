@@ -41,11 +41,24 @@ sidebar_label: 用户
 
 超出限制时，服务器返回 `429 Too Many Requests`：
 
+**登录频率受限**
+
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
   "error_code": "RATE_LIMIT_ERROR",
   "message": "Too many login attempts. Please try again later.",
+  "data": null
+}
+```
+
+**注册频率受限**
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "RATE_LIMIT_ERROR",
+  "message": "Too many registration attempts. Please try again later.",
   "data": null
 }
 ```
@@ -161,13 +174,16 @@ sidebar_label: 用户
 
 其他可能的校验错误消息：
 
-| 错误消息 | 触发条件 |
-|---|---|
-| `Username, email, and password cannot be empty.` | 任意必填字段为空 |
-| `Invalid email format. Please provide a valid email address.` | 邮箱格式不合法 |
-| `Email address is too long (maximum 254 characters).` | 邮箱超长 |
-| `Username must be between 4 and 40 characters long.` | 用户名长度超出范围 |
-| `Email cannot be 'gav.zheng@outlook.com'.` | 使用了保留邮箱 |
+| 错误消息 | 触发条件 | 来源 |
+|---|---|---|
+| `username is required.` | `username` 字段缺失或为空 | 验证中间件 |
+| `email is required.` | `email` 字段缺失或为空 | 验证中间件 |
+| `password is required.` | `password` 字段缺失或为空 | 验证中间件 |
+| `Username, email, and password cannot be empty.` | 任意必填字段为空 | 业务逻辑 |
+| `Invalid email format. Please provide a valid email address.` | 邮箱格式不合法 | 业务逻辑 |
+| `Email address is too long (maximum 254 characters).` | 邮箱超长 | 业务逻辑 |
+| `Username must be between 4 and 40 characters long.` | 用户名长度超出范围 | 业务逻辑 |
+| `Email cannot be 'gav.zheng@outlook.com'.` | 使用了保留邮箱 | 业务逻辑 |
 
 ### 说明
 
@@ -250,6 +266,32 @@ sidebar_label: 用户
 **生产环境行为：** Token **不会**出现在日志中。
 
 #### 错误响应
+
+**缺少 username**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "username is required.",
+  "data": null
+}
+```
+
+**缺少 password**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "password is required.",
+  "data": null
+}
+```
 
 **用户名或密码错误**
 
