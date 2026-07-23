@@ -506,12 +506,12 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 
 **聊天室不存在**
 
-- HTTP 状态码：`400 Bad Request`
+- HTTP 状态码：`404 Not Found`
 
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "BAD_REQUEST_ERROR",
+  "error_code": "NOT_FOUND_ERROR",
   "message": "Room not found.",
   "data": null
 }
@@ -888,78 +888,6 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 
 ---
 
-## POST /api/v1/chat/rooms/&#123;room_id&#125;/messages
-
-在指定聊天室中发送消息。
-
-### 路径参数
-
-| 参数 | 类型 | 描述 |
-|---|---|---|
-| `room_id` | string (UUID v7) | 聊天室 ID |
-
-### 请求
-
-```json
-{
-  "content": "Hello, Bob!"
-}
-```
-
-| 字段 | 类型 | 必填 | 描述 |
-|---|---|---|---|
-| `content` | string | 是 | 消息内容 |
-
-### 响应
-
-#### 成功响应
-
-- HTTP 状态码：`201 Created`
-
-```json
-{
-  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
-  "message": "Message sent successfully.",
-  "data": {
-    "id": "019ef550-0c59-7902-9959-86975c24af39",
-    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
-    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
-    "content": "Hello, Bob!",
-    "created_at": "2026-06-23T15:35:27.871353+00:00"
-  }
-}
-```
-
-| 字段 | 类型 | 描述 |
-|---|---|---|
-| `data.id` | string (UUID v7) | 消息唯一标识 |
-| `data.room_id` | string (UUID v7) | 所属聊天室 ID |
-| `data.sender_id` | string (UUID v7) | 发送者用户 ID |
-| `data.content` | string | 消息内容 |
-| `data.created_at` | string (RFC 3339) | 发送时间 |
-
-#### 错误响应
-
-**不是聊天室成员**
-
-- HTTP 状态码：`403 Forbidden`
-
-```json
-{
-  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "FORBIDDEN_ERROR",
-  "message": "You are not a member of this room.",
-  "data": null
-}
-```
-
-### 说明
-
-- 源码位置：`src/chat/message.rs`
-
----
-
 ## GET /api/v1/chat/rooms/&#123;room_id&#125;/messages
 
 获取指定聊天室的历史消息，支持游标分页。
@@ -1031,6 +959,19 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 }
 ```
 
+**聊天室不存在**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "Room not found.",
+  "data": null
+}
+```
+
 ### 分页用法
 
 首次请求获取最新消息：
@@ -1062,15 +1003,16 @@ GET /api/v1/chat/rooms/{room_id}/messages?limit=50&before={next_cursor}
 
 #### WebSocket 认证
 
-WebSocket 接口需要通过在查询参数中传递 JWT Token 进行认证（与 HTTP API 的 `Authorization` 请求头方式不同）。
+WebSocket 接口通过 `Authorization` 请求头传递 JWT Token 进行认证（与 HTTP API 方式相同）。
 
 ```http
-GET /websocket?token=<jwt_token>
+GET /websocket
+Authorization: Bearer <token>
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
+| 请求头 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `token` | string | 是 | 通过 `POST /api/v1/user/login` 获取的 JWT Token |
+| `Authorization` | string | 是 | 通过 `POST /api/v1/user/login` 获取的 Bearer Token |
 
 **认证错误响应**
 
@@ -1089,6 +1031,7 @@ GET /websocket?token=<jwt_token>
 
 | `error_code` | 条件 |
 |---|---|
+| `AUTHENTICATION_ERROR` | 缺少 Authorization 请求头 |
 | `AUTHENTICATION_ERROR` | Token 无效或已过期 |
 | `AUTHENTICATION_ERROR` | JWT sub 声明不是合法的 UUID |
 | `AUTHENTICATION_ERROR` | 用户不存在或已停用 |
@@ -1147,10 +1090,69 @@ GET /websocket?token=<jwt_token>
 - 源码位置：`src/websocket/handler.rs`
 - 服务端每 30 秒发送 WebSocket 协议层的 `PING` 帧来检测死连接；客户端库会自动回复协议层的 `PONG`，无需应用层代码
 - 同一用户支持多个连接；`user_online` 仅在**第一个**连接建立时广播，`user_offline` 仅在**最后一个**连接关闭后广播
+- 服务端对消息进行频率限制：每个连接**10 秒内最多 30 条**应用层消息。超出限制会返回 `error` 消息，内容为 `"Rate limit exceeded. Please slow down."`
+- Token 每 **10 分钟**重新验证一次。如果 Token 已过期，服务端发送 `error` 消息 `"Token expired. Please reconnect."` 并关闭连接。如果用户账户已被停用，服务端发送 `"Session expired. Please reconnect."` 并关闭连接
+- 用户的输入状态不会再回显给该用户本人（服务端会过滤掉来自本连接的 `typing` 广播）
 
 ### 客户端消息
 
 客户端通过 WebSocket 发送带有 `type` 字段的 JSON 消息。
+
+#### send_message
+
+向聊天室发送消息。消息会被持久化并广播给所有聊天室成员。
+
+```json
+{
+  "type": "send_message",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | 是 | 目标聊天室 ID |
+| `data.content` | string | 是 | 消息内容 |
+
+成功时，服务端返回 `message_sent` 确认：
+
+```json
+{
+  "type": "message_sent",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `data.id` | string (UUID v7) | 消息唯一标识 |
+| `data.room_id` | string (UUID v7) | 所属聊天室 ID |
+| `data.sender_id` | string (UUID v7) | 发送者用户 ID |
+| `data.content` | string | 消息内容 |
+| `data.created_at` | string (RFC 3339) | 发送时间 |
+
+该消息还会作为 `new_message` 事件广播给聊天室的其他成员（详见下方[服务端消息](#服务端消息)）。
+
+**错误响应：**
+
+- 缺少 `data` 字段 → `error`，消息 `Missing 'data' field in send_message.`
+- 缺少或无效的 `room_id` → `error`，消息 `Missing 'room_id' in send_message data.`
+- 缺少 `content` → `error`，消息 `Missing 'content' in send_message data.`
+- 内容为空 → `error`，消息 `Message content cannot be empty.`
+- 内容超过 **5000 字节** → `error`，消息 `Message content exceeds 5000 bytes.`
+- 内容包含控制字符 → 在存储前会自动移除（换行符除外）
+- 聊天室不存在 → `error`，消息 `Room not found.`
+- 不是聊天室成员 → `error`，消息 `You are not a member of this room.`
+- 超出频率限制 → `error`，消息 `Rate limit exceeded. Please slow down.`
 
 #### typing
 
@@ -1215,7 +1217,7 @@ GET /websocket?token=<jwt_token>
 
 #### new_message
 
-当通过 `POST /api/v1/chat/rooms/{room_id}/messages` 发送新消息时广播。所有订阅了该聊天室的成员都会收到此事件。
+当通过 WebSocket `send_message` 发送新消息时广播。所有订阅了该聊天室的成员都会收到此事件。
 
 ```json
 {
@@ -1294,7 +1296,7 @@ GET /websocket?token=<jwt_token>
 
 #### error
 
-客户端消息不合法时返回。
+客户端消息不合法、超出频率限制或会话过期时返回。
 
 ```json
 {
@@ -1304,6 +1306,17 @@ GET /websocket?token=<jwt_token>
   }
 }
 ```
+
+**常见错误消息：**
+| 错误消息 | 触发条件 |
+|---|---|
+| `Invalid WS message JSON: ...` | 消息不是合法 JSON |
+| `Unknown WS message type: '...'.` | 消息类型无法识别 |
+| `Missing 'room_id' in typing.` | `typing` 消息缺少 `room_id` |
+| `Missing 'data' field in send_message.` | `send_message` 缺少 `data` |
+| `Rate limit exceeded. Please slow down.` | 10 秒内超过 30 条消息 |
+| `Token expired. Please reconnect.` | 会话期间 JWT Token 已过期 |
+| `Session expired. Please reconnect.` | 用户账户已被停用或删除 |
 
 ### 断开连接
 
@@ -1315,7 +1328,7 @@ GET /websocket?token=<jwt_token>
 #### 说明
 
 - 源码位置：`src/websocket/handler.rs`
-- 连接断开时，订阅转发任务会自动清理
+- 连接断开时，订阅转发任务会被显式取消
 - 服务端不提供自动重连机制，客户端需要重新建立连接
 
 ### 消息格式汇总
@@ -1326,6 +1339,7 @@ GET /websocket?token=<jwt_token>
 
 | Type | 说明 |
 |---|---|
+| `send_message` | 向聊天室发送消息（详见上方说明） |
 | `typing` | 发送输入状态 |
 | `pong` | 心跳（旧版 — 已由服务端 PING 在协议层处理） |
 
@@ -1334,6 +1348,7 @@ GET /websocket?token=<jwt_token>
 | Type | 说明 |
 |---|---|
 | `connected` | 连接成功建立 |
+| `message_sent` | 消息发送确认（响应 `send_message`） |
 | `new_message` | 订阅的聊天室有新消息 |
 | `user_online` | 用户上线 |
 | `user_offline` | 用户离线 |
@@ -1344,4 +1359,6 @@ GET /websocket?token=<jwt_token>
 
 - 源码位置：`src/websocket/handler.rs`（消息常量与类型定义）
 - 源码位置：`src/websocket/connection.rs`（连接管理器实现）
-- 源码位置：`src/chat/message.rs`（发送消息时广播 new_message）
+- 源码位置：`src/websocket/handler.rs`（send_message 与 new_message 处理）
+- 所有客户端消息受频率限制：**每 10 秒最多 30 条**
+- Token 重新验证每 **10 分钟**执行一次

@@ -7,7 +7,7 @@ User registration and login endpoints.
 
 ## Request Validation
 
-The validation middleware is applied to `POST /api/v1/user/register` and `POST /api/v1/user/login` (not to `GET /api/v1/user/list`).
+The validation middleware is applied to `POST /api/v1/user/register` and `POST /api/v1/user/login`. The `GET /api/v1/user/list` endpoint is protected by the authentication middleware (requires a valid JWT token) but bypasses the validation middleware.
 
 ### Common Validation
 
@@ -323,11 +323,15 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc1ODY0M
 
 ## GET /api/v1/user/list
 
-Retrieve all active users (no authentication required).
+Retrieve all active users (requires JWT authentication).
 
 ### Request
 
-No headers, no request body.
+No request body. Authentication via `Authorization: Bearer <token>` header.
+
+| Header | Type | Required | Description |
+|---|---|---|---|
+| `Authorization` | string | Yes | Bearer token obtained via `POST /api/v1/user/login` |
 
 ### Response
 
@@ -365,6 +369,7 @@ Each user object has the same structure as the `user` field in the register resp
 ### Notes
 
 - Source: `src/user/list.rs`
+- Requires JWT authentication via `Authorization: Bearer <token>` header
 - Only returns users with `is_active = true`
 - Bypasses the validation middleware (no Content-Type check or JSON parsing)
 

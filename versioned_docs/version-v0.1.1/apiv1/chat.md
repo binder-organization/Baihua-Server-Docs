@@ -506,12 +506,12 @@ Each member object:
 
 **Room not found**
 
-- HTTP Status: `400 Bad Request`
+- HTTP Status: `404 Not Found`
 
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "BAD_REQUEST_ERROR",
+  "error_code": "NOT_FOUND_ERROR",
   "message": "Room not found.",
   "data": null
 }
@@ -888,78 +888,6 @@ No request body.
 
 ---
 
-## POST /api/v1/chat/rooms/&#123;room_id&#125;/messages
-
-Send a message to a chat room.
-
-### Path Parameters
-
-| Parameter | Type | Description |
-|---|---|---|
-| `room_id` | string (UUID v7) | Room ID |
-
-### Request
-
-```json
-{
-  "content": "Hello, Bob!"
-}
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `content` | string | Yes | Message content |
-
-### Response
-
-#### Success
-
-- HTTP Status: `201 Created`
-
-```json
-{
-  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
-  "message": "Message sent successfully.",
-  "data": {
-    "id": "019ef550-0c59-7902-9959-86975c24af39",
-    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
-    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
-    "content": "Hello, Bob!",
-    "created_at": "2026-06-23T15:35:27.871353+00:00"
-  }
-}
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `data.id` | string (UUID v7) | Unique message identifier |
-| `data.room_id` | string (UUID v7) | Room this message belongs to |
-| `data.sender_id` | string (UUID v7) | Sender's user ID |
-| `data.content` | string | Message content |
-| `data.created_at` | string (RFC 3339) | Timestamp |
-
-#### Errors
-
-**Not a room member**
-
-- HTTP Status: `403 Forbidden`
-
-```json
-{
-  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "FORBIDDEN_ERROR",
-  "message": "You are not a member of this room.",
-  "data": null
-}
-```
-
-### Notes
-
-- Source: `src/chat/message.rs`
-
----
-
 ## GET /api/v1/chat/rooms/&#123;room_id&#125;/messages
 
 Retrieve historical messages from a chat room with cursor-based pagination.
@@ -1031,6 +959,19 @@ Each message object contains `id`, `room_id`, `sender_id`, `content`, and `creat
 }
 ```
 
+**Room not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "Room not found.",
+  "data": null
+}
+```
+
 ### Pagination Usage
 
 Fetch the most recent messages:
@@ -1062,15 +1003,16 @@ The chat system uses WebSocket for real-time push. After connecting, the server 
 
 #### WebSocket Authentication
 
-The WebSocket endpoint requires JWT authentication via query parameter (different from the HTTP API's `Authorization` header).
+The WebSocket endpoint requires JWT authentication via the `Authorization` header (same as the HTTP API).
 
 ```http
-GET /websocket?token=<jwt_token>
+GET /websocket
+Authorization: Bearer <token>
 ```
 
-| Parameter | Type | Required | Description |
+| Header | Type | Required | Description |
 |---|---|---|---|
-| `token` | string | Yes | JWT obtained via `POST /api/v1/user/login` |
+| `Authorization` | string | Yes | Bearer token obtained via `POST /api/v1/user/login` |
 
 **Authentication Error Responses**
 
@@ -1089,6 +1031,7 @@ If authentication fails, the server responds before the WebSocket upgrade occurs
 
 | `error_code` | Condition |
 |---|---|
+| `AUTHENTICATION_ERROR` | Missing Authorization header |
 | `AUTHENTICATION_ERROR` | Token is invalid or expired |
 | `AUTHENTICATION_ERROR` | JWT sub claim is not a valid UUID |
 | `AUTHENTICATION_ERROR` | User not found or inactive |
@@ -1147,10 +1090,69 @@ If this is the user's first active connection (supporting multiple devices), the
 - Source: `src/websocket/handler.rs`
 - The server sends WebSocket protocol-level `PING` frames every 30 seconds to detect dead connections; the client library automatically responds with `PONG` at the protocol level, no application code needed
 - Multiple connections from the same user are supported; `user_online` is broadcast only on the **first** connection, and `user_offline` only after the **last** connection is closed
+- Rate limiting is enforced: the server accepts up to **30 application messages per 10 seconds** per connection. Exceeding this limit returns an `error` message with `"Rate limit exceeded. Please slow down."`
+- Token re-validation runs every **10 minutes**. If the token has expired, the server sends an `error` message with `"Token expired. Please reconnect."` and closes the connection. If the user account has been deactivated, the server sends `"Session expired. Please reconnect."` and closes the connection
+- Typing indicators from a user are no longer echoed back to that same user (the server suppresses `typing` broadcasts from the connection that originated them)
 
 ### Client Messages
 
 The client sends JSON messages to the server with a `type` field.
+
+#### send_message
+
+Send a message to a chat room. The message is persisted and broadcast to all room members.
+
+```json
+{
+  "type": "send_message",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Room to send the message to |
+| `data.content` | string | Yes | Message content |
+
+On success, the server responds with a `message_sent` acknowledgement:
+
+```json
+{
+  "type": "message_sent",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string (UUID v7) | Unique message identifier |
+| `data.room_id` | string (UUID v7) | Room this message belongs to |
+| `data.sender_id` | string (UUID v7) | Sender's user ID |
+| `data.content` | string | Message content |
+| `data.created_at` | string (RFC 3339) | Timestamp |
+
+The message is also broadcast to all other room members as a `new_message` event (see [Server Messages](#server-messages) below).
+
+**Errors:**
+
+- Missing `data` field → `error` with message `Missing 'data' field in send_message.`
+- Missing or invalid `room_id` → `error` with message `Missing 'room_id' in send_message data.`
+- Missing `content` → `error` with message `Missing 'content' in send_message data.`
+- Empty content → `error` with message `Message content cannot be empty.`
+- Content exceeds **5000 bytes** → `error` with message `Message content exceeds 5000 bytes.`
+- Content contains control characters → they are automatically stripped (except newlines) before the message is stored
+- Room does not exist → `error` with message `Room not found.`
+- Not a room member → `error` with message `You are not a member of this room.`
+- Rate limit exceeded → `error` with message `Rate limit exceeded. Please slow down.`
 
 #### typing
 
@@ -1215,7 +1217,7 @@ The server pushes JSON messages to the client without a preceding client request
 
 #### new_message
 
-Broadcast when a new message is sent via `POST /api/v1/chat/rooms/{room_id}/messages`. All members subscribed to the room receive this event.
+Broadcast when a new message is sent via WebSocket `send_message`. All members subscribed to the room receive this event.
 
 ```json
 {
@@ -1294,7 +1296,7 @@ Broadcast to all members of a room when a user is typing. See [typing](#typing-1
 
 #### error
 
-Returned when a client message is invalid.
+Returned when a client message is invalid, rate limited, or when the session expires.
 
 ```json
 {
@@ -1304,6 +1306,17 @@ Returned when a client message is invalid.
   }
 }
 ```
+
+**Common error messages:**
+| Error | Condition |
+|---|---|
+| `Invalid WS message JSON: ...` | Message is not valid JSON |
+| `Unknown WS message type: '...'.` | Message type is not recognized |
+| `Missing 'room_id' in typing.` | `typing` message without `room_id` |
+| `Missing 'data' field in send_message.` | `send_message` without `data` |
+| `Rate limit exceeded. Please slow down.` | More than 30 messages in 10 seconds |
+| `Token expired. Please reconnect.` | JWT token expired during the session |
+| `Session expired. Please reconnect.` | User account was deactivated or deleted |
 
 ### Disconnection
 
@@ -1315,7 +1328,7 @@ When a WebSocket connection is closed (client disconnect, network failure, or se
 #### Notes
 
 - Source: `src/websocket/handler.rs`
-- Subscription forward tasks are automatically cleaned up when the connection drops
+- Subscription forward tasks are explicitly cancelled when the connection drops
 - There is no reconnection mechanism on the server side; the client must re-establish the connection
 
 ### Message Format Summary
@@ -1326,6 +1339,7 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 
 | Type | Description |
 |---|---|
+| `send_message` | Send a message to a room (see below) |
 | `typing` | Signal typing in a room |
 | `pong` | Heartbeat (legacy — handled at protocol level by server PING) |
 
@@ -1334,6 +1348,7 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 | Type | Description |
 |---|---|
 | `connected` | Connection successfully established |
+| `message_sent` | Acknowledgement that a message was sent (response to `send_message`) |
 | `new_message` | New message in a subscribed room |
 | `user_online` | User came online |
 | `user_offline` | User went offline |
@@ -1344,4 +1359,6 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 
 - Source: `src/websocket/handler.rs` (constants and message types)
 - Source: `src/websocket/connection.rs` (connection manager implementation)
-- Source: `src/chat/message.rs` (new_message broadcast on message send)
+- Source: `src/websocket/handler.rs` (send_message and new_message handling)
+- Rate limiting applies to all client-to-server messages: **30 messages per 10 seconds**
+- Token re-validation runs every **10 minutes**

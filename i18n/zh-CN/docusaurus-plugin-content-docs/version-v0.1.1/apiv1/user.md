@@ -7,7 +7,7 @@ sidebar_label: 用户
 
 ## 请求验证
 
-注册和登录接口经过请求验证中间件（`GET /api/v1/user/list` 不经过此中间件）。
+注册和登录接口经过请求验证中间件。`GET /api/v1/user/list` 接口由认证中间件保护（需要有效的 JWT Token），但不经过请求验证中间件。
 
 ### 通用验证
 
@@ -323,11 +323,15 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc1ODY0M
 
 ## GET /api/v1/user/list
 
-获取所有已激活用户的列表（无需认证）。
+获取所有已激活用户的列表（需要 JWT 认证）。
 
 ### 请求
 
-无请求头、无请求体。
+无请求体。通过 `Authorization: Bearer <token>` 请求头进行认证。
+
+| 请求头 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `Authorization` | string | 是 | 通过 `POST /api/v1/user/login` 获取的 Bearer Token |
 
 ### 响应
 
@@ -365,6 +369,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc1ODY0M
 ### 说明
 
 - 源码位置：`src/user/list.rs`
+- 需要通过 `Authorization: Bearer <token>` 请求头进行 JWT 认证
 - 仅返回 `is_active = true` 的用户
 - 不经过验证中间件（无需 Content-Type 检查或 JSON 解析）
 
@@ -392,7 +397,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc1ODY0M
 | 400 | `BAD_REQUEST_ERROR` | 请求体过大、目标用户不存在等 | 验证中间件、聊天接口 |
 | 401 | `AUTHENTICATION_ERROR` | 认证失败（未提供 Token、Token 无效或已过期、用户不存在） | 登录接口、认证中间件 |
 | 403 | `FORBIDDEN_ERROR` | 权限不足（不是聊天室成员等） | 聊天接口 |
-| 404 | `NOT_FOUND_ERROR` | 路由不存在 | 全局中间件 |
+| 404 | `NOT_FOUND_ERROR` | 资源不存在（路由、聊天室等） | 全局中间件、聊天接口 |
 | 429 | `RATE_LIMIT_ERROR` | 请求过于频繁（频率限制） | 频率限制中间件 |
 | 500 | `INTERNAL_SERVER_ERROR` | 服务器内部错误 | 全局 |
 | 500 | `DATABASE_ERROR` | 数据库错误 | 各业务接口 |

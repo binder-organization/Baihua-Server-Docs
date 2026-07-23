@@ -888,78 +888,6 @@ No request body.
 
 ---
 
-## POST /api/v1/chat/rooms/&#123;room_id&#125;/messages
-
-Send a message to a chat room.
-
-### Path Parameters
-
-| Parameter | Type | Description |
-|---|---|---|
-| `room_id` | string (UUID v7) | Room ID |
-
-### Request
-
-```json
-{
-  "content": "Hello, Bob!"
-}
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `content` | string | Yes | Message content |
-
-### Response
-
-#### Success
-
-- HTTP Status: `201 Created`
-
-```json
-{
-  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
-  "message": "Message sent successfully.",
-  "data": {
-    "id": "019ef550-0c59-7902-9959-86975c24af39",
-    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
-    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
-    "content": "Hello, Bob!",
-    "created_at": "2026-06-23T15:35:27.871353+00:00"
-  }
-}
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `data.id` | string (UUID v7) | Unique message identifier |
-| `data.room_id` | string (UUID v7) | Room this message belongs to |
-| `data.sender_id` | string (UUID v7) | Sender's user ID |
-| `data.content` | string | Message content |
-| `data.created_at` | string (RFC 3339) | Timestamp |
-
-#### Errors
-
-**Not a room member**
-
-- HTTP Status: `403 Forbidden`
-
-```json
-{
-  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "FORBIDDEN_ERROR",
-  "message": "You are not a member of this room.",
-  "data": null
-}
-```
-
-### Notes
-
-- Source: `src/chat/message.rs`
-
----
-
 ## GET /api/v1/chat/rooms/&#123;room_id&#125;/messages
 
 Retrieve historical messages from a chat room with cursor-based pagination.
@@ -1152,6 +1080,58 @@ If this is the user's first active connection (supporting multiple devices), the
 
 The client sends JSON messages to the server with a `type` field.
 
+#### send_message
+
+Send a message to a chat room. The message is persisted and broadcast to all room members.
+
+```json
+{
+  "type": "send_message",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Room to send the message to |
+| `data.content` | string | Yes | Message content |
+
+On success, the server responds with a `message_sent` acknowledgement:
+
+```json
+{
+  "type": "message_sent",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "content": "Hello, Bob!",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string (UUID v7) | Unique message identifier |
+| `data.room_id` | string (UUID v7) | Room this message belongs to |
+| `data.sender_id` | string (UUID v7) | Sender's user ID |
+| `data.content` | string | Message content |
+| `data.created_at` | string (RFC 3339) | Timestamp |
+
+The message is also broadcast to all other room members as a `new_message` event (see [Server Messages](#server-messages) below).
+
+**Errors:**
+
+- Missing `data` field → `error` with message `Missing 'data' field in send_message.`
+- Missing or invalid `room_id` → `error` with message `Missing 'room_id' in send_message data.`
+- Missing `content` → `error` with message `Missing 'content' in send_message data.`
+- Empty content → `error` with message `Message content cannot be empty.`
+- Not a room member → `error` with message `You are not a member of this room.`
+
 #### typing
 
 Broadcast a typing indicator to all members of a room.
@@ -1215,7 +1195,7 @@ The server pushes JSON messages to the client without a preceding client request
 
 #### new_message
 
-Broadcast when a new message is sent via `POST /api/v1/chat/rooms/{room_id}/messages`. All members subscribed to the room receive this event.
+Broadcast when a new message is sent via WebSocket `send_message`. All members subscribed to the room receive this event.
 
 ```json
 {
@@ -1326,6 +1306,7 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 
 | Type | Description |
 |---|---|
+| `send_message` | Send a message to a room (see below) |
 | `typing` | Signal typing in a room |
 | `pong` | Heartbeat (legacy — handled at protocol level by server PING) |
 
@@ -1334,6 +1315,7 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 | Type | Description |
 |---|---|
 | `connected` | Connection successfully established |
+| `message_sent` | Acknowledgement that a message was sent (response to `send_message`) |
 | `new_message` | New message in a subscribed room |
 | `user_online` | User came online |
 | `user_offline` | User went offline |
@@ -1344,4 +1326,4 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 
 - Source: `src/websocket/handler.rs` (constants and message types)
 - Source: `src/websocket/connection.rs` (connection manager implementation)
-- Source: `src/chat/message.rs` (new_message broadcast on message send)
+- Source: `src/websocket/handler.rs` (send_message and new_message handling)
