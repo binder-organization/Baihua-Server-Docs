@@ -39,9 +39,13 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          lastVersion: 'v0.1.1',
-          onlyIncludeVersions: ['v0.1.1'],
+          lastVersion: 'v0.1.3',
+          onlyIncludeVersions: ['v0.1.3'],
           versions: {
+            'v0.1.3': {
+              label: 'v0.1.3',
+              path: 'v0.1.3',
+            },
             'v0.1.1': {
               label: 'v0.1.1',
               path: 'v0.1.1',
@@ -102,15 +106,15 @@ const config: Config = {
             items: [
               {
                 label: 'Overview',
-                to: '/docs/v0.1.1/overview',
+                to: '/docs/v0.1.3/overview',
               },
               {
                 label: 'Quick Start',
-                to: '/docs/v0.1.1/quick-start',
+                to: '/docs/v0.1.3/quick-start',
               },
               {
                 label: 'API Reference',
-                to: '/docs/v0.1.1/apiv1/TEMPLATE',
+                to: '/docs/v0.1.3/apiv1/TEMPLATE',
               },
             ],
         },
@@ -128,11 +132,11 @@ const config: Config = {
             items: [
               {
                 label: 'Changelog',
-                to: '/docs/v0.1.1/changelog',
+                to: '/docs/v0.1.3/changelog',
               },
               {
                 label: 'Contributing',
-                to: '/docs/v0.1.1/contributing',
+                to: '/docs/v0.1.3/contributing',
               },
           ],
         },

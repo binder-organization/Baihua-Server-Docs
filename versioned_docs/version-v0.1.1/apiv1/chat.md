@@ -1211,6 +1211,131 @@ If the `type` field does not match any known message type, the server returns:
 }
 ```
 
+#### encrypt_request
+
+Initiate an encrypted session in a private room. Both users must be online.
+
+```json
+{
+  "type": "encrypt_request",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Private room ID |
+| `data.public_key` | string | Yes | Sender's X25519 ephemeral public key (base64) |
+| `data.identity_key` | string | Yes | Sender's Ed25519 identity public key (base64) |
+| `data.signature` | string | Yes | Signature of public_key signed with identity private key (base64) |
+
+**Errors:**
+
+- Room not found → `error` with message `Room not found.`
+- Room is a group → `error` with message `Encrypted chat is only supported in private rooms.`
+- Session already active → `error` with message `Room already has an active encrypted session.`
+- Not a member → `error` with message `You are not a member of this room.`
+- Partner offline → `error` with message `Both users must be online to start an encrypted session.`
+
+#### encrypt_accept
+
+Accept an encrypted session invitation (response to `encrypt_invitation`).
+
+```json
+{
+  "type": "encrypt_accept",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Private room ID |
+| `data.public_key` | string | Yes | Acceptor's X25519 ephemeral public key (base64) |
+| `data.identity_key` | string | Yes | Acceptor's Ed25519 identity public key (base64) |
+| `data.signature` | string | Yes | Signature of public_key signed with identity private key (base64) |
+
+**Errors:**
+
+- Room not marked for encrypted chat → `error` with message `Room is not marked for encrypted chat.`
+- Session already active → `error` with message `Session is already active.`
+- No pending request → `error` with message `No pending encrypt request for this room.`
+
+#### encrypt_ready
+
+Signal that the local key exchange is complete. The session activates only after both sides have sent `encrypt_ready`.
+
+```json
+{
+  "type": "encrypt_ready",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Private room ID |
+
+#### encrypt_message
+
+Send an encrypted message in an active session. The ciphertext is base64-encoded and relayed to all room members. Max 64KB.
+
+```json
+{
+  "type": "encrypt_message",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "ciphertext": "<base64-nonce||ct||tag>"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Private room ID with active encrypted session |
+| `data.ciphertext` | string | Yes | Base64-encoded ciphertext (max 64KB) |
+
+**Errors:**
+
+- No active session → `error` with message `No active encrypted session in this room.`
+- Not a member → `error` with message `You are not a member of this room.`
+- Empty ciphertext → `error` with message `Ciphertext cannot be empty.`
+- Exceeds 64KB → `error` with message `Ciphertext exceeds maximum size.`
+- Invalid base64 → `error` with message `Invalid base64 ciphertext: ...`
+
+#### encrypt_leave
+
+Voluntarily leave an active encrypted session. All encrypted messages are deleted and the session ends.
+
+```json
+{
+  "type": "encrypt_leave",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | Yes | Private room ID with active encrypted session |
+
+**Errors:**
+
+- No active session → `error` with message `No active encrypted session in this room.`
+
 ### Server Messages
 
 The server pushes JSON messages to the client without a preceding client request.
@@ -1318,6 +1443,180 @@ Returned when a client message is invalid, rate limited, or when the session exp
 | `Token expired. Please reconnect.` | JWT token expired during the session |
 | `Session expired. Please reconnect.` | User account was deactivated or deleted |
 
+#### encrypt_invitation
+
+Sent to the partner when a user initiates an encrypted session (response to `encrypt_request`).
+
+```json
+{
+  "type": "encrypt_invitation",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "inviter_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "inviter_username": "alice",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | Room ID |
+| `data.inviter_id` | string (UUID v7) | User who initiated the session |
+| `data.inviter_username` | string | Username of the inviter |
+| `data.public_key` | string | Inviter's X25519 ephemeral public key (base64) |
+| `data.identity_key` | string | Inviter's Ed25519 identity public key (base64) |
+| `data.signature` | string | Signature of public_key (base64) |
+
+#### encrypt_accept_response
+
+Sent to the inviter when the other user accepts the encrypted session (response to `encrypt_accept`).
+
+```json
+{
+  "type": "encrypt_accept_response",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "acceptor_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "acceptor_username": "bob",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | Room ID |
+| `data.acceptor_id` | string (UUID v7) | User who accepted |
+| `data.acceptor_username` | string | Username of the acceptor |
+| `data.public_key` | string | Acceptor's X25519 ephemeral public key (base64) |
+| `data.identity_key` | string | Acceptor's Ed25519 identity public key (base64) |
+| `data.signature` | string | Signature of public_key (base64) |
+
+#### encrypt_session_ready
+
+Broadcast when both users have signalled `encrypt_ready` and the encrypted session is active.
+
+```json
+{
+  "type": "encrypt_session_ready",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | Room ID |
+
+#### new_encrypted_message
+
+Broadcast when an encrypted message is sent in an active session.
+
+```json
+{
+  "type": "new_encrypted_message",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "ciphertext": "<base64-nonce||ct||tag>",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string (UUID v7) | Unique message identifier |
+| `data.room_id` | string (UUID v7) | Room this message belongs to |
+| `data.sender_id` | string (UUID v7) | Sender's user ID |
+| `data.ciphertext` | string | Base64-encoded ciphertext |
+| `data.created_at` | string (RFC 3339) | Message timestamp |
+
+#### encrypted_message_sent
+
+Acknowledgement sent to the sender after `encrypt_message` is successfully stored and broadcast.
+
+```json
+{
+  "type": "encrypted_message_sent",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string (UUID v7) | Unique message identifier |
+| `data.room_id` | string (UUID v7) | Room ID |
+
+#### encrypt_session_ended
+
+Broadcast when an encrypted session terminates.
+
+```json
+{
+  "type": "encrypt_session_ended",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "reason": "user_left",
+    "offline_user_id": "019ef530-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | Room ID |
+| `data.reason` | string | Termination reason: `user_left` or `partner_timeout` |
+| `data.offline_user_id` | string (UUID v7) \| null | The user who left or timed out |
+
+#### encrypt_partner_disconnected
+
+Sent when the other user in an encrypted session goes offline. The session enters a 30-second grace period.
+
+```json
+{
+  "type": "encrypt_partner_disconnected",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "offline_user_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "grace_until": "2026-06-23T15:36:00.000000+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | Room ID |
+| `data.offline_user_id` | string (UUID v7) | The user who disconnected |
+| `data.grace_until` | string (RFC 3339) | Timestamp when the grace period expires |
+
+#### encrypt_session_expired
+
+Sent on reconnect when an encrypted room has `is_encrypted=true` but no active session. Indicates the session ended while the user was offline.
+
+```json
+{
+  "type": "encrypt_session_expired",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | Room ID |
+
 ### Disconnection
 
 When a WebSocket connection is closed (client disconnect, network failure, or server shutdown):
@@ -1342,6 +1641,11 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 | `send_message` | Send a message to a room (see below) |
 | `typing` | Signal typing in a room |
 | `pong` | Heartbeat (legacy — handled at protocol level by server PING) |
+| `encrypt_request` | Initiate an encrypted session in a private room |
+| `encrypt_accept` | Accept an encrypted session invitation |
+| `encrypt_ready` | Signal local key exchange is complete |
+| `encrypt_message` | Send an encrypted message in an active session |
+| `encrypt_leave` | Voluntarily leave an active encrypted session |
 
 **Server to Client**
 
@@ -1354,6 +1658,14 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 | `user_offline` | User went offline |
 | `typing` | User is typing in a room |
 | `error` | Invalid client message |
+| `encrypt_invitation` | Encrypted session invitation |
+| `encrypt_accept_response` | Encrypted session accept acknowledgement |
+| `encrypt_session_ready` | Encrypted session is now active |
+| `new_encrypted_message` | New encrypted message in a room |
+| `encrypted_message_sent` | Acknowledgement of `encrypt_message` |
+| `encrypt_session_ended` | Encrypted session terminated |
+| `encrypt_partner_disconnected` | Partner went offline in encrypted session |
+| `encrypt_session_expired` | Encrypted session expired while offline |
 
 #### Notes
 
@@ -1362,3 +1674,9 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 - Source: `src/websocket/handler.rs` (send_message and new_message handling)
 - Rate limiting applies to all client-to-server messages: **30 messages per 10 seconds**
 - Token re-validation runs every **10 minutes**
+
+### Notes
+
+- Source: `src/chat/encrypted.rs` (encrypted session lifecycle: request, accept, ready, message send, leave, grace period, cleanup)
+- Source: `src/websocket/connection.rs` (encrypted session state management: pending_states, ready_states, active_sessions, grace_periods)
+- Source: `src/websocket/handler.rs` (WS dispatch for all encrypt_* message types, disconnect/reconnect hooks)

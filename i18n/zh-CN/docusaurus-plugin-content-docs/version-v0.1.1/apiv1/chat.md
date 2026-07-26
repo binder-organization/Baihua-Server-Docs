@@ -1211,6 +1211,131 @@ Authorization: Bearer <token>
 }
 ```
 
+#### encrypt_request
+
+发起加密会话。双方用户必须同时在线。
+
+```json
+{
+  "type": "encrypt_request",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | 是 | 私聊聊天室 ID |
+| `data.public_key` | string | 是 | 发起方的 X25519 临时公钥（base64） |
+| `data.identity_key` | string | 是 | 发起方的 Ed25519 身份公钥（base64） |
+| `data.signature` | string | 是 | 用身份私钥对 public_key 的签名（base64） |
+
+**错误响应：**
+
+- 聊天室不存在 → `error`，消息 `Room not found.`
+- 群组聊天室 → `error`，消息 `Encrypted chat is only supported in private rooms.`
+- 会话已活跃 → `error`，消息 `Room already has an active encrypted session.`
+- 不是聊天室成员 → `error`，消息 `You are not a member of this room.`
+- 对方离线 → `error`，消息 `Both users must be online to start an encrypted session.`
+
+#### encrypt_accept
+
+接受加密会话邀请（响应 `encrypt_invitation`）。
+
+```json
+{
+  "type": "encrypt_accept",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | 是 | 私聊聊天室 ID |
+| `data.public_key` | string | 是 | 接受方的 X25519 临时公钥（base64） |
+| `data.identity_key` | string | 是 | 接受方的 Ed25519 身份公钥（base64） |
+| `data.signature` | string | 是 | 用身份私钥对 public_key 的签名（base64） |
+
+**错误响应：**
+
+- 聊天室未标记为加密 → `error`，消息 `Room is not marked for encrypted chat.`
+- 会话已活跃 → `error`，消息 `Session is already active.`
+- 无待处理的请求 → `error`，消息 `No pending encrypt request for this room.`
+
+#### encrypt_ready
+
+确认本地密钥交换完成。双方都发送 `encrypt_ready` 后才会激活会话。
+
+```json
+{
+  "type": "encrypt_ready",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | 是 | 私聊聊天室 ID |
+
+#### encrypt_message
+
+在活跃加密会话中发送加密消息。密文以 base64 编码，服务器透传给所有聊天室成员。最大 64KB。
+
+```json
+{
+  "type": "encrypt_message",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "ciphertext": "<base64-nonce||ct||tag>"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | 是 | 活跃加密会话的私聊聊天室 ID |
+| `data.ciphertext` | string | 是 | Base64 编码的密文（最大 64KB） |
+
+**错误响应：**
+
+- 无活跃会话 → `error`，消息 `No active encrypted session in this room.`
+- 不是聊天室成员 → `error`，消息 `You are not a member of this room.`
+- 密文为空 → `error`，消息 `Ciphertext cannot be empty.`
+- 超过 64KB → `error`，消息 `Ciphertext exceeds maximum size.`
+- 无效的 base64 → `error`，消息 `Invalid base64 ciphertext: ...`
+
+#### encrypt_leave
+
+主动离开加密会话。所有加密消息将被删除，会话终止。
+
+```json
+{
+  "type": "encrypt_leave",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `data.room_id` | string (UUID v7) | 是 | 活跃加密会话的私聊聊天室 ID |
+
+**错误响应：**
+
+- 无活跃会话 → `error`，消息 `No active encrypted session in this room.`
+
 ### 服务端消息
 
 服务端在无需客户端请求的情况下主动推送 JSON 消息。
@@ -1318,6 +1443,178 @@ Authorization: Bearer <token>
 | `Token expired. Please reconnect.` | 会话期间 JWT Token 已过期 |
 | `Session expired. Please reconnect.` | 用户账户已被停用或删除 |
 
+#### encrypt_invitation
+
+当用户发起加密会话时发送给另一方（响应 `encrypt_request`）。
+
+```json
+{
+  "type": "encrypt_invitation",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "inviter_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "inviter_username": "alice",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+| `data.inviter_id` | string (UUID v7) | 发起加密的用户 ID |
+| `data.inviter_username` | string | 发起方的用户名 |
+| `data.public_key` | string | 发起方的 X25519 临时公钥（base64） |
+| `data.identity_key` | string | 发起方的 Ed25519 身份公钥（base64） |
+| `data.signature` | string | public_key 的签名（base64） |
+
+#### encrypt_accept_response
+
+当对方接受加密会话时发送给发起方（响应 `encrypt_accept`）。
+
+```json
+{
+  "type": "encrypt_accept_response",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "acceptor_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "public_key": "<X25519-base64>",
+    "identity_key": "<Ed25519-base64>",
+    "signature": "<base64>"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+| `data.acceptor_id` | string (UUID v7) | 接受方的用户 ID |
+| `data.public_key` | string | 接受方的 X25519 临时公钥（base64） |
+| `data.identity_key` | string | 接受方的 Ed25519 身份公钥（base64） |
+| `data.signature` | string | public_key 的签名（base64） |
+
+#### encrypt_session_ready
+
+双方都已发送 `encrypt_ready` 后广播，表示加密会话已激活。
+
+```json
+{
+  "type": "encrypt_session_ready",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+
+#### new_encrypted_message
+
+活跃加密会话中发送加密消息时广播。
+
+```json
+{
+  "type": "new_encrypted_message",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "ciphertext": "<base64-nonce||ct||tag>",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.id` | string (UUID v7) | 消息唯一标识 |
+| `data.room_id` | string (UUID v7) | 消息所属聊天室 ID |
+| `data.sender_id` | string (UUID v7) | 发送者用户 ID |
+| `data.ciphertext` | string | Base64 编码的密文 |
+| `data.created_at` | string (RFC 3339) | 消息时间戳 |
+
+#### encrypted_message_sent
+
+`encrypt_message` 成功存储后发送给发送方的确认。
+
+```json
+{
+  "type": "encrypted_message_sent",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.id` | string (UUID v7) | 消息唯一标识 |
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+
+#### encrypt_session_ended
+
+加密会话终止时广播。
+
+```json
+{
+  "type": "encrypt_session_ended",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "reason": "user_left",
+    "offline_user_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+| `data.reason` | string | 终止原因：`user_left` 或 `partner_timeout` |
+| `data.offline_user_id` | string (UUID v7) \| null | 离开或超时的用户 ID |
+
+#### encrypt_partner_disconnected
+
+加密会话中对方离线时发送。会话进入 30 秒宽限期。
+
+```json
+{
+  "type": "encrypt_partner_disconnected",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "offline_user_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "grace_until": "2026-06-23T15:36:00+00:00"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+| `data.offline_user_id` | string (UUID v7) | 离线的用户 ID |
+| `data.grace_until` | string (RFC 3339) | 宽限期截止时间 |
+
+#### encrypt_session_expired
+
+重连时检测到加密房间 `is_encrypted=true` 但无活跃会话时发送。表示会话在用户离线期间已结束。
+
+```json
+{
+  "type": "encrypt_session_expired",
+  "data": {
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.room_id` | string (UUID v7) | 聊天室 ID |
+
 ### 断开连接
 
 当 WebSocket 连接关闭时（客户端断开、网络故障或服务端关闭）：
@@ -1342,6 +1639,11 @@ Authorization: Bearer <token>
 | `send_message` | 向聊天室发送消息（详见上方说明） |
 | `typing` | 发送输入状态 |
 | `pong` | 心跳（旧版 — 已由服务端 PING 在协议层处理） |
+| `encrypt_request` | 发起加密会话 |
+| `encrypt_accept` | 接受加密会话邀请 |
+| `encrypt_ready` | 确认密钥交换完成 |
+| `encrypt_message` | 在加密会话中发送消息 |
+| `encrypt_leave` | 离开加密会话 |
 
 **服务端 → 客户端**
 
@@ -1354,6 +1656,14 @@ Authorization: Bearer <token>
 | `user_offline` | 用户离线 |
 | `typing` | 用户在聊天室中输入 |
 | `error` | 客户端消息不合法 |
+| `encrypt_invitation` | 加密会话邀请 |
+| `encrypt_accept_response` | 接受加密会话的响应 |
+| `encrypt_session_ready` | 加密会话已激活 |
+| `new_encrypted_message` | 加密聊天室中有新消息 |
+| `encrypted_message_sent` | 加密消息发送确认 |
+| `encrypt_session_ended` | 加密会话已终止 |
+| `encrypt_partner_disconnected` | 加密会话中对方已离线 |
+| `encrypt_session_expired` | 加密会话已过期 |
 
 #### 说明
 
@@ -1362,3 +1672,9 @@ Authorization: Bearer <token>
 - 源码位置：`src/websocket/handler.rs`（send_message 与 new_message 处理）
 - 所有客户端消息受频率限制：**每 10 秒最多 30 条**
 - Token 重新验证每 **10 分钟**执行一次
+
+### 说明
+
+- 源码位置：`src/chat/encrypted.rs`（加密会话生命周期管理）
+- 源码位置：`src/websocket/connection.rs`（加密会话状态管理）
+- 源码位置：`src/websocket/handler.rs`（WS 消息分发与断线重连钩子）
