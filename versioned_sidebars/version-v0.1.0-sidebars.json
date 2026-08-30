@@ -34,8 +34,7 @@
         "apiv1/health",
         "apiv1/greet",
         "apiv1/user",
-        "apiv1/chat",
-        "apiv1/websocket"
+        "apiv1/chat"
       ]
     },
     {
