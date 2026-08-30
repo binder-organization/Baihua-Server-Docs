@@ -19,7 +19,7 @@ No headers, no request body.
 
 ```json
 {
-  "server_version": "0.1.0",
+  "server_version": "0.1.4",
   "api_version": "v1",
   "message": "Hello Baihua."
 }
@@ -27,7 +27,7 @@ No headers, no request body.
 
 | Field | Type | Description |
 |---|---|---|
-| `server_version` | string | Server version, hardcoded to `"0.1.0"` |
+| `server_version` | string | Server version, hardcoded to `"0.1.4"` |
 | `api_version` | string | API version, hardcoded to `"v1"` |
 | `message` | string | Greeting, hardcoded to `"Hello Baihua."` |
 

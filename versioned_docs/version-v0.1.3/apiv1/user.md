@@ -375,6 +375,524 @@ Each user object has the same structure as the `user` field in the register resp
 
 ---
 
+## GET /api/v1/user/&#123;user&#125;
+
+Retrieve a user's public profile by user ID or username.
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `user` | string | User ID (UUID v7) or username |
+
+### Request
+
+No request body. Authentication via `Authorization: Bearer <token>` header.
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "User profile retrieved successfully.",
+  "data": {
+    "user": {
+      "id": "019ef520-0c59-7902-9959-86975c24af39",
+      "username": "alice",
+      "nickname": null,
+      "bio": null,
+      "avatar": null
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.user.id` | string (UUID v7) | Unique user identifier |
+| `data.user.username` | string | Username |
+| `data.user.nickname` | string \| null | Display name |
+| `data.user.bio` | string \| null | User biography |
+| `data.user.avatar` | string \| null | Avatar URL |
+
+#### Errors
+
+**User not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "User not found.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/user/profile.rs`
+- Only returns public profile fields (no email, phone number, or token version)
+- The `user` parameter accepts either a UUID or an exact username
+
+---
+
+## PATCH /api/v1/user/me
+
+Update the authenticated user's profile. Missing fields keep their current value; explicit `null` clears the field.
+
+### Request
+
+```json
+{
+  "nickname": "Alice",
+  "phone_number": "+8613800000000",
+  "bio": "Hello, I am Alice!",
+  "avatar": "https://example.com/avatar.jpg"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nickname` | string \| null | No | Display name (max 40 characters) |
+| `phone_number` | string \| null | No | Phone number in E.164 format |
+| `bio` | string \| null | No | Biography (max 200 characters) |
+| `avatar` | string \| null | No | Avatar URL (max 2048 characters, must start with `http://` or `https://`) |
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "User profile updated successfully.",
+  "data": {
+    "user": {
+      "id": "019ef520-0c59-7902-9959-86975c24af39",
+      "username": "alice",
+      "email": "alice@example.com",
+      "nickname": "Alice",
+      "phone_number": "+8613800000000",
+      "bio": "Hello, I am Alice!",
+      "avatar": "https://example.com/avatar.jpg",
+      "created_at": "2026-06-23T15:35:27.871353Z",
+      "is_active": true
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.user` | object | Updated user profile |
+
+#### Errors
+
+**Nothing to update**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Nothing to update: provide nickname, phone_number, bio and/or avatar.",
+  "data": null
+}
+```
+
+**Validation errors**
+
+| Message | Condition |
+|---|---|
+| `Nickname cannot be empty.` | Empty nickname string |
+| `Nickname must be at most 40 characters long.` | Nickname exceeds 40 characters |
+| `Phone number must be in E.164 format, for example +8613800000000.` | Invalid phone format |
+| `Bio cannot be empty.` | Empty bio string |
+| `Bio must be at most 200 characters long.` | Bio exceeds 200 characters |
+| `Avatar URL cannot be empty.` | Empty avatar string |
+| `Avatar URL must be at most 2048 characters long.` | Avatar URL exceeds 2048 characters |
+| `Avatar URL must start with http:// or https://.` | Invalid avatar URL scheme |
+
+### Notes
+
+- Source: `src/user/profile.rs`
+- The response returns the full user profile including fields not modified in this request
+
+---
+
+## DELETE /api/v1/user/me
+
+Delete the authenticated user's account. This action requires password verification.
+
+### Request
+
+```json
+{
+  "password": "secureP@ss1"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `password` | string | Yes | Current password for verification |
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Account deleted successfully.",
+  "data": null
+}
+```
+
+#### Errors
+
+**Password is incorrect**
+
+- HTTP Status: `401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "AUTHENTICATION_ERROR",
+  "message": "Password is incorrect.",
+  "data": null
+}
+```
+
+**Password is empty**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "Password cannot be empty.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/user/delete.rs`
+- Room memberships and room requests are cascaded away
+- Messages and rooms keep their rows with `sender_id`/`created_by` set to `NULL`
+- Previously uploaded avatar files are deleted from disk
+
+---
+
+## POST /api/v1/user/me/logout
+
+Log the authenticated user out of all devices by invalidating all previously issued JWTs.
+
+### Request
+
+No request body.
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Logged out successfully.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/user/logout.rs`
+- This endpoint bumps the user's `token_version`, causing all existing JWTs to fail the version check
+- All devices are logged out simultaneously
+
+---
+
+## PATCH /api/v1/user/me/password
+
+Change the authenticated user's password. Requires the current password for verification.
+
+### Request
+
+```json
+{
+  "old_password": "secureP@ss1",
+  "new_password": "newSecureP@ss2"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `old_password` | string | Yes | Current password |
+| `new_password` | string | Yes | New password |
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Password changed successfully.",
+  "data": null
+}
+```
+
+#### Errors
+
+**Old password is incorrect**
+
+- HTTP Status: `401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "AUTHENTICATION_ERROR",
+  "message": "Old password is incorrect.",
+  "data": null
+}
+```
+
+**Passwords are empty**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "Old password and new password cannot be empty.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/user/password.rs`
+- After a successful password change, all previously issued JWTs are invalidated (similar to logout)
+- The old password is verified to prevent a leaked token from being used to take over the account
+
+---
+
+## POST /api/v1/user/me/avatar
+
+Upload a new avatar image for the authenticated user. The avatar is stored on the server and served via a static URL.
+
+### Request
+
+This endpoint accepts `multipart/form-data` with a single field named `file`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file` | binary | Yes | Image file (JPEG, PNG, GIF, or WebP) |
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Avatar uploaded successfully.",
+  "data": {
+    "user": {
+      "id": "019ef520-0c59-7902-9959-86975c24af39",
+      "username": "alice",
+      "email": "alice@example.com",
+      "nickname": "Alice",
+      "phone_number": "+8613800000000",
+      "bio": "Hello, I am Alice!",
+      "avatar": "/static/avatars/019ef550-0c59-7902-9959-86975c24af39.jpg",
+      "created_at": "2026-06-23T15:35:27.871353Z",
+      "is_active": true
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.user.avatar` | string | URL path to the uploaded avatar |
+
+#### Errors
+
+**Missing file field**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Upload field 'file' is required.",
+  "data": null
+}
+```
+
+**Invalid image type**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "Avatar must be a JPEG, PNG, GIF or WebP image.",
+  "data": null
+}
+```
+
+**File too large**
+
+- HTTP Status: `413 Payload Too Large`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "PAYLOAD_TOO_LARGE_ERROR",
+  "message": "Avatar file exceeds the maximum allowed size of 5242880 bytes.",
+  "data": null
+}
+```
+
+**Empty file**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "Avatar file cannot be empty.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/user/avatar.rs`
+- The avatar is served at `/static/avatars/{uuid}.{ext}` (public endpoint, no authentication required)
+- Previously uploaded avatars are automatically deleted after a new one is uploaded
+- Supported image types: JPEG, PNG, GIF, WebP
+
+---
+
+## GET /api/v1/user/search
+
+Search for users by username substring or exact user ID.
+
+### Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `username` | string | Conditional | - | Username substring to search (case-insensitive) |
+| `user_id` | string (UUID v7) | Conditional | - | Exact user ID to look up |
+| `limit` | integer | No | 20 | Maximum number of results (max 50) |
+| `offset` | integer | No | 0 | Number of results to skip |
+
+Either `username` or `user_id` must be provided.
+
+### Request
+
+No request body. Authentication via `Authorization: Bearer <token>` header.
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Users searched successfully.",
+  "data": {
+    "users": [
+      {
+        "id": "019ef520-0c59-7902-9959-86975c24af39",
+        "username": "alice",
+        "nickname": "Alice",
+        "bio": "Hello, I am Alice!",
+        "avatar": "/static/avatars/019ef550-0c59-7902-9959-86975c24af39.jpg"
+      }
+    ],
+    "count": 1,
+    "limit": 20,
+    "offset": 0
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.users` | array | Array of user profiles, ordered by creation date descending |
+| `data.count` | integer | Total number of matching users |
+| `data.limit` | integer | Limit used |
+| `data.offset` | integer | Offset used |
+
+Each user object:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string (UUID v7) | User ID |
+| `username` | string | Username |
+| `nickname` | string \| null | Display name |
+| `bio` | string \| null | Biography |
+| `avatar` | string \| null | Avatar URL |
+
+#### Errors
+
+**Missing search parameter**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "Either username or user_id is required.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/user/search.rs`
+- Only returns active users (`is_active = true`)
+- Username search is case-insensitive and uses substring matching
+- Only public profile fields are returned (no email, phone number, or token version)
+
+---
+
 ## Standard Error Envelope
 
 All error responses share a uniform structure:

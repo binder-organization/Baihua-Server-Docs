@@ -1680,3 +1680,574 @@ All messages are JSON with a `type` string discriminator and a `data` object.
 - Source: `src/chat/encrypted.rs` (encrypted session lifecycle: request, accept, ready, message send, leave, grace period, cleanup)
 - Source: `src/websocket/connection.rs` (encrypted session state management: pending_states, ready_states, active_sessions, grace_periods)
 - Source: `src/websocket/handler.rs` (WS dispatch for all encrypt_* message types, disconnect/reconnect hooks)
+
+---
+
+## Room Requests
+
+Room requests provide a gated flow for creating private rooms. Instead of directly creating a room with `POST /api/v1/chat/rooms`, users can send a request that the receiver must accept before the room is created.
+
+### POST /api/v1/chat/rooms/requests
+
+Send a room request to another user. The receiver must accept the request before a private room is created between the two users.
+
+#### Request
+
+```json
+{
+  "receiver_id": "019ef530-0c59-7902-9959-86975c24af39",
+  "is_encrypted": false,
+  "message": "Hi! I'd like to chat with you."
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `receiver_id` | string (UUID v7) | Yes | Target user's ID |
+| `is_encrypted` | boolean | No | Whether to create an encrypted room when accepted (default: `false`) |
+| `message` | string | Yes | Request message (1–500 bytes) |
+
+#### Response
+
+##### Success
+
+- HTTP Status: `201 Created`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Room request sent successfully.",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "receiver_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "status": "pending",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | Unique request identifier |
+| `data.sender_id` | string (UUID v7) | Sender's user ID |
+| `data.receiver_id` | string (UUID v7) | Receiver's user ID |
+| `data.status` | string | Request status: `pending` |
+| `data.created_at` | string (RFC 3339) | Creation timestamp |
+
+##### Errors
+
+**Cannot send a room request to yourself**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "You cannot send a room request to yourself.",
+  "data": null
+}
+```
+
+**Target user not found**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Target user not found.",
+  "data": null
+}
+```
+
+**Daily limit reached**
+
+- HTTP Status: `429 Too Many Requests`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "RATE_LIMIT_ERROR",
+  "message": "You have reached the daily room request limit.",
+  "data": null
+}
+```
+
+**Receiver inbox full**
+
+- HTTP Status: `409 Conflict`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "CONFLICT_ERROR",
+  "message": "The target user has too many pending room requests.",
+  "data": null
+}
+```
+
+**Duplicate pending request**
+
+- HTTP Status: `409 Conflict`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "CONFLICT_ERROR",
+  "message": "A pending room request to this user already exists.",
+  "data": null
+}
+```
+
+**Validation error (empty or too long message)**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "Message content cannot be empty.",
+  "data": null
+}
+```
+
+#### Notes
+
+- Source: `src/chat/request.rs`
+- Only one pending request per (sender, receiver) pair is allowed (idempotent)
+- Expired pending requests are automatically swept before each creation attempt
+- The message is sanitized: control characters (except newlines) are stripped and the content is trimmed
+
+---
+
+### GET /api/v1/chat/rooms/requests/pending
+
+List pending room requests received by the authenticated user.
+
+#### Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `limit` | integer | No | 50 | Maximum number of requests to return (max 100) |
+| `offset` | integer | No | 0 | Number of requests to skip |
+
+#### Request
+
+No request body. Authentication via `Authorization: Bearer <token>` header.
+
+#### Response
+
+##### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Pending room requests retrieved successfully.",
+  "data": {
+    "requests": [
+      {
+        "id": "019ef550-0c59-7902-9959-86975c24af39",
+        "message": "Hi! I'd like to chat with you.",
+        "is_encrypted": false,
+        "created_at": "2026-06-23T15:35:27.871353+00:00",
+        "sender": {
+          "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+          "username": "alice",
+          "nickname": null
+        }
+      }
+    ],
+    "count": 1,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.requests` | array | Array of pending requests, ordered by creation date descending |
+| `data.count` | integer | Total number of pending requests |
+| `data.limit` | integer | Limit used |
+| `data.offset` | integer | Offset used |
+
+Each request object:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string (UUID v7) | Request ID |
+| `message` | string | Request message |
+| `is_encrypted` | boolean | Whether the requested room should be encrypted |
+| `created_at` | string (RFC 3339) | Creation timestamp |
+| `sender` | object | Sender's public profile |
+
+The `sender` object:
+
+| Field | Type | Description |
+|---|---|---|
+| `user_id` | string (UUID v7) | Sender's user ID |
+| `username` | string | Sender's username |
+| `nickname` | string \| null | Sender's display name |
+
+#### Notes
+
+- Source: `src/chat/request.rs`
+- Only returns requests with status `pending`
+
+---
+
+### GET /api/v1/chat/rooms/requests/sent
+
+List room requests sent by the authenticated user.
+
+#### Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `limit` | integer | No | 50 | Maximum number of requests to return (max 100) |
+| `offset` | integer | No | 0 | Number of requests to skip |
+
+#### Request
+
+No request body. Authentication via `Authorization: Bearer <token>` header.
+
+#### Response
+
+##### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Sent room requests retrieved successfully.",
+  "data": {
+    "requests": [
+      {
+        "id": "019ef550-0c59-7902-9959-86975c24af39",
+        "message": "Hi! I'd like to chat with you.",
+        "is_encrypted": false,
+        "status": "pending",
+        "created_at": "2026-06-23T15:35:27.871353+00:00",
+        "receiver": {
+          "user_id": "019ef530-0c59-7902-9959-86975c24af39",
+          "username": "bob",
+          "nickname": "Bobby"
+        }
+      }
+    ],
+    "count": 1,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.requests` | array | Array of sent requests, ordered by creation date descending |
+| `data.count` | integer | Total number of sent requests |
+| `data.limit` | integer | Limit used |
+| `data.offset` | integer | Offset used |
+
+Each request object:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string (UUID v7) | Request ID |
+| `message` | string | Request message |
+| `is_encrypted` | boolean | Whether the requested room should be encrypted |
+| `status` | string | Request status: `pending`, `accepted`, `declined`, `expired`, or `cancelled` |
+| `created_at` | string (RFC 3339) | Creation timestamp |
+| `receiver` | object | Receiver's public profile |
+
+The `receiver` object:
+
+| Field | Type | Description |
+|---|---|---|
+| `user_id` | string (UUID v7) | Receiver's user ID |
+| `username` | string | Receiver's username |
+| `nickname` | string \| null | Receiver's display name |
+
+#### Notes
+
+- Source: `src/chat/request.rs`
+- Returns all requests regardless of status
+
+---
+
+### POST /api/v1/chat/rooms/requests/&#123;request_id&#125;/accept
+
+Accept a pending room request. This creates a private room between the sender and receiver.
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `request_id` | string (UUID v7) | Request ID |
+
+#### Request
+
+No request body.
+
+#### Response
+
+##### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Room request accepted.",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "status": "accepted",
+    "room": {
+      "id": "019ef560-0c59-7902-9959-86975c24af39",
+      "name": null,
+      "created_by": "019ef520-0c59-7902-9959-86975c24af39",
+      "created_at": "2026-06-23T15:35:27.871353+00:00",
+      "is_group": false,
+      "members": [
+        "019ef520-0c59-7902-9959-86975c24af39",
+        "019ef530-0c59-7902-9959-86975c24af39"
+      ]
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | Request ID |
+| `data.status` | string | Updated status: `accepted` |
+| `data.room` | object | Created room (same structure as `POST /api/v1/chat/rooms` response) |
+
+##### Errors
+
+**Request not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "Room request not found.",
+  "data": null
+}
+```
+
+**Only receiver can accept**
+
+- HTTP Status: `403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "FORBIDDEN_ERROR",
+  "message": "Only the receiver can accept this room request.",
+  "data": null
+}
+```
+
+**Request already handled**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Room request has already been handled.",
+  "data": null
+}
+```
+
+#### Notes
+
+- Source: `src/chat/request.rs`
+- Accepting an already-accepted request is idempotent and returns the existing room
+- The room is created via the same logic as `POST /api/v1/chat/rooms` for private rooms
+
+---
+
+### POST /api/v1/chat/rooms/requests/&#123;request_id&#125;/decline
+
+Decline a pending room request.
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `request_id` | string (UUID v7) | Request ID |
+
+#### Request
+
+No request body.
+
+#### Response
+
+##### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Room request declined.",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "status": "declined"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | Request ID |
+| `data.status` | string | Updated status: `declined` |
+
+##### Errors
+
+**Request not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "Room request not found.",
+  "data": null
+}
+```
+
+**Only receiver can decline**
+
+- HTTP Status: `403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "FORBIDDEN_ERROR",
+  "message": "Only the receiver can decline this room request.",
+  "data": null
+}
+```
+
+**Request already handled**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Room request has already been handled.",
+  "data": null
+}
+```
+
+#### Notes
+
+- Source: `src/chat/request.rs`
+- Only requests with status `pending` can be declined
+
+---
+
+### POST /api/v1/chat/rooms/requests/&#123;request_id&#125;/cancel
+
+Cancel a pending room request sent by the authenticated user.
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `request_id` | string (UUID v7) | Request ID |
+
+#### Request
+
+No request body.
+
+#### Response
+
+##### Success
+
+- HTTP Status: `200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "Room request cancelled.",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "status": "cancelled"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | Request ID |
+| `data.status` | string | Updated status: `cancelled` |
+
+##### Errors
+
+**Request not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "Room request not found.",
+  "data": null
+}
+```
+
+**Only sender can cancel**
+
+- HTTP Status: `403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "FORBIDDEN_ERROR",
+  "message": "Only the sender can cancel this room request.",
+  "data": null
+}
+```
+
+**Request already handled**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "Room request has already been handled.",
+  "data": null
+}
+```
+
+#### Notes
+
+- Source: `src/chat/request.rs`
+- Only requests with status `pending` can be cancelled
+- Cancelling frees the (sender, receiver) pair for a fresh request and the receiver's inbox slot

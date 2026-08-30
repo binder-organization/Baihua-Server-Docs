@@ -19,7 +19,7 @@ sidebar_label: 问候
 
 ```json
 {
-  "server_version": "0.1.0",
+  "server_version": "0.1.4",
   "api_version": "v1",
   "message": "Hello Baihua."
 }
@@ -27,7 +27,7 @@ sidebar_label: 问候
 
 | 字段 | 类型 | 描述 |
 |---|---|---|
-| `server_version` | string | 服务器版本号，固定为 `"0.1.0"` |
+| `server_version` | string | 服务器版本号，固定为 `"0.1.4"` |
 | `api_version` | string | API 版本号，固定为 `"v1"` |
 | `message` | string | 问候语，固定为 `"Hello Baihua."` |
 

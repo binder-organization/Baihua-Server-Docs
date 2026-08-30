@@ -1678,3 +1678,574 @@ Authorization: Bearer <token>
 - 源码位置：`src/chat/encrypted.rs`（加密会话生命周期管理）
 - 源码位置：`src/websocket/connection.rs`（加密会话状态管理）
 - 源码位置：`src/websocket/handler.rs`（WS 消息分发与断线重连钩子）
+
+---
+
+## 房间请求
+
+房间请求提供了一种受控的流程来创建私聊室。用户无需直接使用 `POST /api/v1/chat/rooms` 创建房间，而是可以发送请求，接收方必须接受请求后才会创建两人之间的私聊室。
+
+### POST /api/v1/chat/rooms/requests
+
+向其他用户发送房间请求。接收方必须接受请求后，才会在双方之间创建私聊室。
+
+#### 请求
+
+```json
+{
+  "receiver_id": "019ef530-0c59-7902-9959-86975c24af39",
+  "is_encrypted": false,
+  "message": "你好！我想和你聊天。"
+}
+```
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `receiver_id` | string (UUID v7) | 是 | 目标用户的 ID |
+| `is_encrypted` | boolean | 否 | 接受后是否创建加密房间（默认：`false`） |
+| `message` | string | 是 | 请求消息（1–500 字节） |
+
+#### 响应
+
+##### 成功
+
+- HTTP 状态码：`201 Created`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "房间请求发送成功。",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "receiver_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "status": "pending",
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | 唯一请求标识符 |
+| `data.sender_id` | string (UUID v7) | 发送方用户 ID |
+| `data.receiver_id` | string (UUID v7) | 接收方用户 ID |
+| `data.status` | string | 请求状态：`pending` |
+| `data.created_at` | string (RFC 3339) | 创建时间戳 |
+
+##### 错误
+
+**不能向自己发送房间请求**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "不能向自己发送房间请求。",
+  "data": null
+}
+```
+
+**目标用户未找到**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "目标用户未找到。",
+  "data": null
+}
+```
+
+**达到每日限制**
+
+- HTTP 状态码：`429 Too Many Requests`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "RATE_LIMIT_ERROR",
+  "message": "已达到每日房间请求限制。",
+  "data": null
+}
+```
+
+**接收方收件箱已满**
+
+- HTTP 状态码：`409 Conflict`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "CONFLICT_ERROR",
+  "message": "目标用户有太多待处理的房间请求。",
+  "data": null
+}
+```
+
+**重复的待处理请求**
+
+- HTTP 状态码：`409 Conflict`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "CONFLICT_ERROR",
+  "message": "已存在一个待处理的房间请求。",
+  "data": null
+}
+```
+
+**验证错误（消息为空或过长）**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "VALIDATION_ERROR",
+  "message": "消息内容不能为空。",
+  "data": null
+}
+```
+
+#### 说明
+
+- 源码位置：`src/chat/request.rs`
+- 每对（发送方，接收方）只允许一个待处理请求（幂等）
+- 过期的待处理请求会在每次创建请求前自动清理
+- 消息会被清理：控制字符（换行符除外）会被移除，内容会被修剪
+
+---
+
+### GET /api/v1/chat/rooms/requests/pending
+
+列出接收方用户的待处理房间请求。
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 默认值 | 描述 |
+|---|---|---|---|---|
+| `limit` | integer | 否 | 50 | 最大返回请求数（最大 100） |
+| `offset` | integer | 否 | 0 | 跳过的请求数 |
+
+#### 请求
+
+无请求体。通过 `Authorization: Bearer <token>` 头进行身份验证。
+
+#### 响应
+
+##### 成功
+
+- HTTP 状态码：`200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "待处理房间请求获取成功。",
+  "data": {
+    "requests": [
+      {
+        "id": "019ef550-0c59-7902-9959-86975c24af39",
+        "message": "你好！我想和你聊天。",
+        "is_encrypted": false,
+        "created_at": "2026-06-23T15:35:27.871353+00:00",
+        "sender": {
+          "user_id": "019ef520-0c59-7902-9959-86975c24af39",
+          "username": "alice",
+          "nickname": null
+        }
+      }
+    ],
+    "count": 1,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.requests` | array | 待处理请求数组，按创建时间降序排列 |
+| `data.count` | integer | 待处理请求总数 |
+| `data.limit` | integer | 使用的限制值 |
+| `data.offset` | integer | 使用的偏移量 |
+
+每个请求对象：
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `id` | string (UUID v7) | 请求 ID |
+| `message` | string | 请求消息 |
+| `is_encrypted` | boolean | 请求的房间是否应加密 |
+| `created_at` | string (RFC 3339) | 创建时间戳 |
+| `sender` | object | 发送方的公开资料 |
+
+`sender` 对象：
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `user_id` | string (UUID v7) | 发送方用户 ID |
+| `username` | string | 发送方用户名 |
+| `nickname` | string \| null | 发送方显示名称 |
+
+#### 说明
+
+- 源码位置：`src/chat/request.rs`
+- 仅返回状态为 `pending` 的请求
+
+---
+
+### GET /api/v1/chat/rooms/requests/sent
+
+列出发送方用户已发送的房间请求。
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 默认值 | 描述 |
+|---|---|---|---|---|
+| `limit` | integer | 否 | 50 | 最大返回请求数（最大 100） |
+| `offset` | integer | 否 | 0 | 跳过的请求数 |
+
+#### 请求
+
+无请求体。通过 `Authorization: Bearer <token>` 头进行身份验证。
+
+#### 响应
+
+##### 成功
+
+- HTTP 状态码：`200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "已发送房间请求获取成功。",
+  "data": {
+    "requests": [
+      {
+        "id": "019ef550-0c59-7902-9959-86975c24af39",
+        "message": "你好！我想和你聊天。",
+        "is_encrypted": false,
+        "status": "pending",
+        "created_at": "2026-06-23T15:35:27.871353+00:00",
+        "receiver": {
+          "user_id": "019ef530-0c59-7902-9959-86975c24af39",
+          "username": "bob",
+          "nickname": "Bobby"
+        }
+      }
+    ],
+    "count": 1,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.requests` | array | 已发送请求数组，按创建时间降序排列 |
+| `data.count` | integer | 已发送请求总数 |
+| `data.limit` | integer | 使用的限制值 |
+| `data.offset` | integer | 使用的偏移量 |
+
+每个请求对象：
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `id` | string (UUID v7) | 请求 ID |
+| `message` | string | 请求消息 |
+| `is_encrypted` | boolean | 请求的房间是否应加密 |
+| `status` | string | 请求状态：`pending`、`accepted`、`declined`、`expired` 或 `cancelled` |
+| `created_at` | string (RFC 3339) | 创建时间戳 |
+| `receiver` | object | 接收方的公开资料 |
+
+`receiver` 对象：
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `user_id` | string (UUID v7) | 接收方用户 ID |
+| `username` | string | 接收方用户名 |
+| `nickname` | string \| null | 接收方显示名称 |
+
+#### 说明
+
+- 源码位置：`src/chat/request.rs`
+- 返回所有状态的请求
+
+---
+
+### POST /api/v1/chat/rooms/requests/&#123;request_id&#125;/accept
+
+接受待处理的房间请求。这将在发送方和接收方之间创建一个私聊室。
+
+#### 路径参数
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `request_id` | string (UUID v7) | 请求 ID |
+
+#### 请求
+
+无请求体。
+
+#### 响应
+
+##### 成功
+
+- HTTP 状态码：`200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "房间请求已接受。",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "status": "accepted",
+    "room": {
+      "id": "019ef560-0c59-7902-9959-86975c24af39",
+      "name": null,
+      "created_by": "019ef520-0c59-7902-9959-86975c24af39",
+      "created_at": "2026-06-23T15:35:27.871353+00:00",
+      "is_group": false,
+      "members": [
+        "019ef520-0c59-7902-9959-86975c24af39",
+        "019ef530-0c59-7902-9959-86975c24af39"
+      ]
+    }
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | 请求 ID |
+| `data.status` | string | 更新后的状态：`accepted` |
+| `data.room` | object | 创建的房间（与 `POST /api/v1/chat/rooms` 响应结构相同） |
+
+##### 错误
+
+**请求未找到**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "房间请求未找到。",
+  "data": null
+}
+```
+
+**只有接收方可以接受**
+
+- HTTP 状态码：`403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "FORBIDDEN_ERROR",
+  "message": "只有接收方可以接受此房间请求。",
+  "data": null
+}
+```
+
+**请求已处理**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "房间请求已处理。",
+  "data": null
+}
+```
+
+#### 说明
+
+- 源码位置：`src/chat/request.rs`
+- 接受已接受的请求是幂等的，会返回现有房间
+- 房间通过与 `POST /api/v1/chat/rooms` 相同的逻辑创建
+
+---
+
+### POST /api/v1/chat/rooms/requests/&#123;request_id&#125;/decline
+
+拒绝待处理的房间请求。
+
+#### 路径参数
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `request_id` | string (UUID v7) | 请求 ID |
+
+#### 请求
+
+无请求体。
+
+#### 响应
+
+##### 成功
+
+- HTTP 状态码：`200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "房间请求已拒绝。",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "status": "declined"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | 请求 ID |
+| `data.status` | string | 更新后的状态：`declined` |
+
+##### 错误
+
+**请求未找到**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "房间请求未找到。",
+  "data": null
+}
+```
+
+**只有接收方可以拒绝**
+
+- HTTP 状态码：`403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "FORBIDDEN_ERROR",
+  "message": "只有接收方可以拒绝此房间请求。",
+  "data": null
+}
+```
+
+**请求已处理**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "房间请求已处理。",
+  "data": null
+}
+```
+
+#### 说明
+
+- 源码位置：`src/chat/request.rs`
+- 只有状态为 `pending` 的请求可以被拒绝
+
+---
+
+### POST /api/v1/chat/rooms/requests/&#123;request_id&#125;/cancel
+
+取消发送方用户发送的待处理房间请求。
+
+#### 路径参数
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `request_id` | string (UUID v7) | 请求 ID |
+
+#### 请求
+
+无请求体。
+
+#### 响应
+
+##### 成功
+
+- HTTP 状态码：`200 OK`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "OK",
+  "message": "房间请求已取消。",
+  "data": {
+    "request_id": "019ef550-0c59-7902-9959-86975c24af39",
+    "status": "cancelled"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.request_id` | string (UUID v7) | 请求 ID |
+| `data.status` | string | 更新后的状态：`cancelled` |
+
+##### 错误
+
+**请求未找到**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "NOT_FOUND_ERROR",
+  "message": "房间请求未找到。",
+  "data": null
+}
+```
+
+**只有发送方可以取消**
+
+- HTTP 状态码：`403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "FORBIDDEN_ERROR",
+  "message": "只有发送方可以取消此房间请求。",
+  "data": null
+}
+```
+
+**请求已处理**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "error_code": "BAD_REQUEST_ERROR",
+  "message": "房间请求已处理。",
+  "data": null
+}
+```
+
+#### 说明
+
+- 源码位置：`src/chat/request.rs`
+- 只有状态为 `pending` 的请求可以被取消
+- 取消后释放（发送方，接收方）对以进行新请求，并释放接收方的收件箱槽位
