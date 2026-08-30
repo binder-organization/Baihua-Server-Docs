@@ -40,15 +40,11 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           lastVersion: 'v0.1.4',
-          onlyIncludeVersions: ['v0.1.4', 'v0.1.3', 'v0.1.1', 'v0.1.0'],
+          onlyIncludeVersions: ['v0.1.4', 'v0.1.1', 'v0.1.0'],
           versions: {
             'v0.1.4': {
               label: 'v0.1.4',
               path: 'v0.1.4',
-            },
-            'v0.1.3': {
-              label: 'v0.1.3',
-              path: 'v0.1.3',
             },
             'v0.1.1': {
               label: 'v0.1.1',
