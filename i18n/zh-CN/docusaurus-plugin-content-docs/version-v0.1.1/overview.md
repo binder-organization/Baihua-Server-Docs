@@ -7,7 +7,7 @@ sidebar_label: 概览
 ![Language: Rust](https://img.shields.io/badge/Language-Rust-orange)
 ![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License: Apache v2](https://img.shields.io/badge/License-Apache%20v2-green)
-![Github Stars](https://img.shields.io/github/stars/Binder-organize/Baihua-Server?style=flat&color=red)
+![Github Stars](https://img.shields.io/github/stars/binder-organization/Baihua-Server?style=flat&color=red)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](./code-of-conduct.md)
 
 白桦是一个由**Rust**编写的，为开发者定制的团队沟通工具，用于帮助开发者快速完成各种任务。

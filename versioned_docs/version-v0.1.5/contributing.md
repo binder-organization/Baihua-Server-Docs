@@ -21,7 +21,7 @@ Baihua's design philosophy always revolves around one goal: to minimize develope
 
 ### 1. Report Issues
 
-If you encounter any problems while using Baihua, feel free to submit a new issue in the project's [Issue](https://github.com/Binder-organize/Baihua-Server/issues) tracker.
+If you encounter any problems while using Baihua, feel free to submit a new issue in the project's [Issue](https://github.com/binder-organization/Baihua-Server/issues) tracker.
 
 *   **Issue Description**: Describe the problem you encountered in detail.
 *   **Reproduction Steps**: Provide steps to reproduce the issue.
@@ -31,7 +31,7 @@ If you encounter any problems while using Baihua, feel free to submit a new issu
 
 ### 2. Suggest Features
 
-If you think Baihua is missing certain features, or if you have suggestions for improving existing features, you are also welcome to submit a new [Issue](https://github.com/Binder-organize/Baihua-Server/issues).
+If you think Baihua is missing certain features, or if you have suggestions for improving existing features, you are also welcome to submit a new [Issue](https://github.com/binder-organization/Baihua-Server/issues).
 
 Before submitting, please make sure:
 *   You have searched and **found no** similar existing issues.
@@ -164,4 +164,4 @@ If the commit contains a revert operation, the type should start with `revert:`,
 If you have any questions or suggestions, feel free to contact us via:
 
 *   Gavin Zheng `gav.zheng@outlook.com`
-*   GitHub Repository: [Binder-organize/Baihua-Server](https://github.com/Binder-organize/Baihua-Server)
+*   GitHub Repository: [binder-organization/Baihua-Server](https://github.com/binder-organization/Baihua-Server)

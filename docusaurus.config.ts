@@ -11,7 +11,7 @@ const config: Config = {
   baseUrl: '/Baihua-Server-Docs/',
 
   // GitHub pages deployment config
-  organizationName: 'Binder-organize',
+  organizationName: 'binder-organization',
   projectName: 'Baihua-Server-Docs',
 
   onBrokenLinks: 'warn',
@@ -96,7 +96,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://github.com/Binder-organize/Baihua-Server',
+          href: 'https://github.com/binder-organization/Baihua-Server',
           label: 'GitHub',
           position: 'right',
         },
@@ -127,7 +127,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/Binder-organize/Baihua-Server',
+              href: 'https://github.com/binder-organization/Baihua-Server',
             },
           ],
         },

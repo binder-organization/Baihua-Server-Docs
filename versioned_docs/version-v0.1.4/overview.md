@@ -7,7 +7,7 @@ sidebar_label: Overview
 ![Language: Rust](https://img.shields.io/badge/Language-Rust-orange)
 ![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-blue)
 ![License: Apache v2](https://img.shields.io/badge/License-Apache%20v2-green)
-![Github Stars](https://img.shields.io/github/stars/Binder-organize/Baihua-Server?style=flat&color=red)
+![Github Stars](https://img.shields.io/github/stars/binder-organization/Baihua-Server?style=flat&color=red)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-4baaaa.svg)](./code-of-conduct.md)
 
 Baihua is a team communication tool customized for developers, built with **Rust**, designed to help developers complete various tasks efficiently.

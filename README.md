@@ -1,6 +1,6 @@
 # Baihua Server Docs
 
-Official documentation site for [Baihua Server](https://github.com/Binder-organize/Baihua-Server), built with [Docusaurus 3](https://docusaurus.io/). Supports English and Simplified Chinese, deployed to GitHub Pages.
+Official documentation site for [Baihua Server](https://github.com/binder-organization/Baihua-Server), built with [Docusaurus 3](https://docusaurus.io/). Supports English and Simplified Chinese, deployed to GitHub Pages.
 
 ## About
 

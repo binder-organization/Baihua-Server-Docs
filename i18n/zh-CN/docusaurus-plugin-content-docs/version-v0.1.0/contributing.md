@@ -21,7 +21,7 @@ sidebar_label: 贡献指南
 
 ### 1. 报告问题
 
-如果你在使用白桦时遇到了任何问题，欢迎在项目的 [Issue](https://github.com/Binder-organize/Baihua-Server/issues) 中提交一个新的 issue。
+如果你在使用白桦时遇到了任何问题，欢迎在项目的 [Issue](https://github.com/binder-organization/Baihua-Server/issues) 中提交一个新的 issue。
 
 - **问题描述**：详细描述你遇到的问题。
 - **重现步骤**：提供能够重现问题的步骤。
@@ -31,7 +31,7 @@ sidebar_label: 贡献指南
 
 ### 2. 提出功能建议
 
-如果你认为白桦缺少某些功能，或者你有改进现有功能的建议，也欢迎提交一个新的[Issue](https://github.com/Binder-organize/Baihua-Server/issues) 。
+如果你认为白桦缺少某些功能，或者你有改进现有功能的建议，也欢迎提交一个新的[Issue](https://github.com/binder-organization/Baihua-Server/issues) 。
 
 在提交之前，请一定确认：  
 - 已经搜索过，**没有**发现类似的 issue。
@@ -164,4 +164,4 @@ python3 tests/run_tests.py --keep
 如果你有任何问题或建议，欢迎通过以下方式联系我们：
 
 - Gavin Zheng `gav.zheng@outlook.com`
-- Github 仓库：[Binder-organize/Baihua-Server](https://github.com/Binder-organize/Baihua-Server)
+- Github 仓库：[binder-organization/Baihua-Server](https://github.com/binder-organization/Baihua-Server)

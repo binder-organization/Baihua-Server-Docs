@@ -9,6 +9,13 @@ import Translate, {translate} from '@docusaurus/Translate';
 
 import styles from './index.module.css';
 
+// `versions.json` is written by `docusaurus docs:version` and lists versions
+// newest-first, so the homepage always points at the latest docs without
+// needing a manual edit on every release.
+import docVersions from '@site/versions.json';
+
+const LATEST_DOCS_VERSION = docVersions[0];
+
 function HomepageHeader() {
   return (
     <header className="hero hero--baihua">
@@ -22,12 +29,12 @@ function HomepageHeader() {
         <div className="hero__actions">
           <Link
             className="button button--secondary button--lg"
-            to="/docs/v0.1.4/quick-start">
+            to={`/docs/${LATEST_DOCS_VERSION}/quick-start`}>
             <Translate id="homepage.quickStart">Quick Start</Translate>
           </Link>
           <Link
             className="button button--outline button--lg"
-            to="/docs/v0.1.4/overview"
+            to={`/docs/${LATEST_DOCS_VERSION}/overview`}
             style={{
               borderColor: 'rgba(255,255,255,0.5)',
               color: '#ffffff',
@@ -55,16 +62,16 @@ function QuickStartPreview(): ReactNode {
         </p>
         <div className={styles.codeBlock}>
           <pre>
-            <code>{`git clone https://github.com/Binder-organize/Baihua-Server.git
+            <code>{`git clone https://github.com/binder-organization/Baihua-Server.git
 cd Baihua-Server
-cp .env.example .env
-docker compose up -d database
-cargo run`}</code>
+cp .env.example .env          # defaults work as-is for local dev
+docker compose up -d database # PostgreSQL on :2423
+cargo run                     # server on http://localhost:2424`}</code>
           </pre>
         </div>
         <Link
           className="button button--primary button--lg"
-          to="/docs/v0.1.4/quick-start">
+          to={`/docs/${LATEST_DOCS_VERSION}/quick-start`}>
           <Translate id="homepage.viewGuide">View Full Quick Start Guide →</Translate>
         </Link>
       </div>
