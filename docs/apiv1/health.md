@@ -20,7 +20,7 @@ No headers, no request body.
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
+  "code": "SUCCESS",
   "message": "Service is healthy.",
   "data": {
     "status": "ok"
@@ -31,7 +31,7 @@ No headers, no request body.
 | Field | Type | Description |
 |---|---|---|
 | `response_id` | string | UUID v7 uniquely identifying this request |
-| `error_code` | string | Always `"OK"` |
+| `code` | string | Always `"SUCCESS"` |
 | `message` | string | `"Service is healthy."` |
 | `data.status` | string | `"ok"` |
 
@@ -44,7 +44,7 @@ No headers, no request body.
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "INTERNAL_SERVER_ERROR",
+  "code": "INTERNAL_SERVER_ERROR",
   "message": "Database connection failed.",
   "data": null
 }

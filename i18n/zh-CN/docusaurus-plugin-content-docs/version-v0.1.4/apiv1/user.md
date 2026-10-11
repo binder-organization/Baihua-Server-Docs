@@ -261,7 +261,7 @@ sidebar_label: 用户
 | `iat` | 签发时间（Unix 时间戳） |
 | `exp` | 过期时间（Unix 时间戳） |
 
-**开发环境行为：** Token 会打印在日志中，方便调试。
+**安全说明：** 服务端不会将签发的 Token 写入日志。
 
 **生产环境行为：** Token **不会**出现在日志中。
 
@@ -815,7 +815,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc1ODY0M
 |---|---|---|---|---|
 | `username` | string | 条件 | - | 要搜索的用户名子字符串（不区分大小写） |
 | `user_id` | string (UUID v7) | 条件 | - | 要查找的精确用户 ID |
-| `limit` | integer | 否 | 20 | 最大结果数（最大 50） |
+| `limit` | integer | 否 | 20 | 返回数量必须为正数，最大限制为 50 |
 | `offset` | integer | 否 | 0 | 跳过的结果数 |
 
 必须提供 `username` 或 `user_id` 之一。
@@ -884,11 +884,25 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc1ODY0M
 }
 ```
 
+**搜索分页数量无效**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Search page limit must be at least 1.",
+  "data": null
+}
+```
+
 ### 说明
 
 - 源码位置：`src/user/search.rs`
 - 仅返回活跃用户（`is_active = true`）
 - 用户名搜索不区分大小写并使用子字符串匹配
+- 对活跃用户的子字符串搜索增加三元组索引；选择性较好的搜索词可以使用该索引
 - 仅返回公开资料字段（不包含电子邮件、电话号码或令牌版本）
 
 ---

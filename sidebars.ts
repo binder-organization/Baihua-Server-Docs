@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
         'contributing',
         'code-of-conduct',
         'security',
+        'encrypted-chat',
       ],
     },
     {

@@ -14,7 +14,7 @@ This file describes the required format for API endpoint documentation. New API 
 | Single endpoint group (e.g. user, chat) | `<name>.md` — e.g. `user.md`, `chat.md` |
 | Standalone endpoint (e.g. greet, health) | `<name>.md` — e.g. `greet.md`, `health.md` |
 
-Place the file in `docs/en/apiv1/` and create a matching file in `docs/zh-CN/apiv1/`.
+Place the file in `versioned_docs/version-<version>/apiv1/` (English) and create a matching file in `i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/apiv1/` (Chinese).
 
 ---
 
@@ -42,7 +42,7 @@ Brief description.
 
 - HTTP Status: `401 Unauthorized`
 
-| `error_code` | message | Condition |
+| `code` | message | Condition |
 |---|---|---|
 
 All authentication errors share the same response format:
@@ -50,7 +50,7 @@ All authentication errors share the same response format:
 ```json
 {
   "response_id": "uuid-v7-string",
-  "error_code": "AUTHENTICATION_ERROR",
+  "code": "AUTHENTICATION_ERROR",
   "message": "Error description.",
   "data": null
 }
@@ -104,7 +104,7 @@ If no request body is needed, write: "No request body."
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
+  "code": "SUCCESS",
   "message": "Success message.",
   "data": { ... }
 }
@@ -129,7 +129,7 @@ Each error is a separate item with bold name and full JSON response:
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "ERROR_CODE",
+  "code": "ERROR_CODE",
   "message": "Error description.",
   "data": null
 }
@@ -150,7 +150,7 @@ Place it at the end with the global error code table.
 ```json
 {
   "response_id": "uuid-v7-string",
-  "error_code": "ERROR_CODE",
+  "code": "ERROR_CODE",
   "message": "Human-readable message.",
   "data": null
 }
@@ -158,7 +158,7 @@ Place it at the end with the global error code table.
 
 ### Global Error Codes
 
-| HTTP Status | `error_code` | Description | Origin |
+| HTTP Status | `code` | Description | Origin |
 |---|---|---|---|
 
 ---
@@ -171,7 +171,7 @@ Place it at the end with the global error code table.
 - No deeper nesting.
 
 ### Language pairs
-Every English doc in `docs/en/apiv1/` must have a corresponding Chinese doc in `docs/zh-CN/apiv1/` with the same structure.
+Every English doc in `versioned_docs/version-<version>/apiv1/` must have a corresponding Chinese doc in `i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/apiv1/` with the same structure. Register both in `sidebars.ts` (English) — the Chinese sidebar is generated from it.
 
 ### Chinese doc heading mapping
 
@@ -190,7 +190,7 @@ Every English doc in `docs/en/apiv1/` must have a corresponding Chinese doc in `
 
 ### JSON Blocks
 - Use the same example values across both language versions (don't translate the JSON content).
-- Error JSON must always include `response_id`, `error_code`, `message`, and `data: null`.
+- Error JSON must always include `response_id`, `code`, `message`, and `data: null`.
 - Use realistic UUID v7 values for response_id and entity IDs (e.g. `019ef520-...`).
 
 ### Field Tables
@@ -219,6 +219,7 @@ See existing docs for reference:
 | Endpoint | File |
 |---|---|
 | Simple (no auth, no body) | `greet.md` |
-| Simple (with auth) | `health.md` |
+| Simple (public, no auth, DB-backed) | `health.md` |
+| Simple (with auth) | `user.md` (`GET /api/v1/user/me/logout`) |
 | Complex (auth, multiple endpoints, errors) | `user.md` |
 | Complex (auth, path/query params, cursor pagination) | `chat.md` |

@@ -5,38 +5,90 @@ sidebar_label: 生产部署
 
 ## 生产部署
 
-使用 Docker Compose 部署整个服务栈：
+创建生产环境配置文件：
 
 ```bash
-# 1. 设置生产环境变量
-export JWT_SECRET="your-256-bit-secret"
-export POSTGRES_USER="baihua"
-export POSTGRES_PASSWORD="strong-password"
-export POSTGRES_DB="baihua"
-
-# 2. 构建并启动所有服务（首次构建可能需要 10-15 分钟）
-docker compose --profile production up -d --build
+cp .env.example .env.production
 ```
 
-> 首次构建需要在 Docker 里从零下载并编译所有 Rust 依赖。
-> 后续构建由于 Docker 层缓存会快得多。
-> 如需查看构建进度，去掉 `-d` 参数：`docker compose --profile production up --build`。
+将 `.env.production` 中的开发用数据库凭据替换为生产值，并添加未被注释的 `JWT_SECRET`，填写足够长的随机值，然后启动服务：
+
+```bash
+docker compose --env-file .env.production --profile production up -d --build
+```
 
 启动后包含两个服务：
 
 | 服务           | 容器名               | 端口       |
 |--------------|-------------------|----------|
-| **database** | `baihua-database` | 2423（映射） |
-| **server**   | `baihua-server`   | 2424     |
+| **database** | `baihua-database` | 2423（仅本机） |
+| **server**   | `baihua-server`   | 2424（仅本机） |
+
+数据库在编排网络内使用端口 `5432`。数据库记录保存在 `baihua-postgres-data` 卷，上传的头像保存在 `baihua-avatar-data` 卷，文件消息字节保存在 `baihua-file-data` 卷。
+
+每组数据库与本地文件卷只运行一个服务端实例。文件存储、活跃上传跟踪、加密会话状态和 WebSocket 连接都属于单个服务端进程；当前版本不提供多实例所需的共享文件存储与分布式协调。
+
+服务端容器的入口脚本仅以 root 身份准备应用目录，随后以 `baihua` 用户身份运行服务端。绑定挂载拒绝修改属主时，只有当该用户对这些目录已经具备写权限和遍历权限，启动才会继续；否则容器会以权限错误退出，而不会改以 root 身份运行服务端。用自定义绑定挂载替换命名卷时，请确保挂载目录对该用户可写。
+
+如需公开访问，在 `.env.production` 中将 `BAIHUA_DOMAIN` 设为指向此主机的域名，允许外部连接端口 80 和 443，再启用可选反向代理：
+
+```bash
+docker compose --env-file .env.production --profile production --profile public up -d --build
+```
+
+反向代理转发 WebSocket 连接并管理加密证书。证书状态保存在 `baihua-caddy-data` 卷。未启用公开配置时，只能从部署主机访问服务。
 
 服务端依赖数据库健康检查才启动，并自带 Docker HEALTHCHECK（`GET /health`）。查看日志：
 
 ```bash
-docker compose --profile production logs -f
+docker compose --env-file .env.production --profile production --profile public logs -f
 ```
 
-停止并清理：
+停止服务并保留全部数据卷：
 
 ```bash
-docker compose --profile production down -v
+docker compose --env-file .env.production --profile production --profile public down
 ```
+
+## 备份
+
+在维护窗口中先停止服务端，再一起备份数据库、头像和文件消息字节，避免备份期间的上传造成数据不一致。备份结束后重新启动服务端，命令失败时也要重新启动。每次创建独立的私有时间戳目录，将其复制到另一台主机的受保护存储中，并安全保存 `.env.production` 及自定义配置：
+
+```bash
+umask 077
+backup_directory="backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$backup_directory"
+docker compose --env-file .env.production --profile production stop server
+docker compose --env-file .env.production exec -T database sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_directory/database.dump"
+docker run --rm --mount type=volume,src=baihua-avatar-data,dst=/avatars,readonly --mount "type=bind,src=$PWD/$backup_directory,dst=/backups" alpine tar -C /avatars -cf /backups/avatars.tar .
+docker run --rm --mount type=volume,src=baihua-file-data,dst=/files,readonly --mount "type=bind,src=$PWD/$backup_directory,dst=/backups" alpine tar -C /files -cf /backups/files.tar .
+docker compose --env-file .env.production --profile production start server
+```
+
+启用了公开访问时，再备份证书状态：
+
+```bash
+docker run --rm --mount type=volume,src=baihua-caddy-data,dst=/caddy-data,readonly --mount "type=bind,src=$PWD/$backup_directory,dst=/backups" alpine tar -C /caddy-data -cf /backups/caddy-data.tar .
+```
+
+## 恢复
+
+使用全新创建、数据库与数据卷均为空的服务栈。选定已有备份目录，先恢复数据库、头像和文件消息字节，再启动服务端：
+
+```bash
+backup_directory=backups/SELECTED_BACKUP_DIRECTORY
+docker compose --env-file .env.production up -d --wait database
+docker compose --env-file .env.production exec -T database sh -c 'pg_restore --exit-on-error --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$backup_directory/database.dump"
+docker run --rm --mount type=volume,src=baihua-avatar-data,dst=/avatars --mount "type=bind,src=$PWD/$backup_directory,dst=/backups,readonly" alpine tar -C /avatars -xf /backups/avatars.tar
+docker run --rm --mount type=volume,src=baihua-file-data,dst=/files --mount "type=bind,src=$PWD/$backup_directory,dst=/backups,readonly" alpine tar -C /files -xf /backups/files.tar
+docker compose --env-file .env.production --profile production up -d server
+```
+
+若备份中有 `caddy-data.tar`，将其恢复到空的证书卷后启动公开访问服务：
+
+```bash
+docker run --rm --mount type=volume,src=baihua-caddy-data,dst=/caddy-data --mount "type=bind,src=$PWD/$backup_directory,dst=/backups,readonly" alpine tar -C /caddy-data -xf /backups/caddy-data.tar
+docker compose --env-file .env.production --profile production --profile public up -d reverse-proxy
+```
+
+定期演练恢复，并检查服务端健康状态、已有账户能否登录、上传头像能否读取以及文件消息能否下载。向现有部署恢复前必须停止服务端，不要覆盖正在使用的数据库。

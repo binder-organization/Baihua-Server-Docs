@@ -10,14 +10,15 @@ Baihua is a team communication tool built with Rust, designed for developers. Th
 
 Source files are located at:
 
-- `docs/` — English docs (current version)
-- `i18n/zh-CN/docusaurus-plugin-content-docs/current/` — Chinese docs (current version)
+- `versioned_docs/version-<version>/` — English docs (published versions)
+- `i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/` — Chinese docs (published versions)
+- `docs/` and `i18n/zh-CN/docusaurus-plugin-content-docs/current/` — staging copies for the next version; they are excluded by `onlyIncludeVersions` in `docusaurus.config.ts` and are **not** published until a version is cut from them
 
 To add or modify content:
 
-1. Edit the corresponding `.md` file
+1. Edit the `.md` file for every published version you want to change (currently `v0.1.5`)
 2. If adding a new doc, register it in `sidebars.ts`
-3. For Chinese translations, create a matching `.md` under `i18n/zh-CN/` with the same relative path
+3. For Chinese translations, create a matching `.md` under `i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/` with the same relative path
 4. Run `npm run build` to verify no errors
 
 ### Local Preview
@@ -54,8 +55,8 @@ npm run serve
 
 # Quick smoke test
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/docs/v0.1.1/overview
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/zh-CN/docs/v0.1.1/overview
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/docs/v0.1.5/overview
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/zh-CN/docs/v0.1.5/overview
 
 # Type check
 npm run typecheck
@@ -63,11 +64,17 @@ npm run typecheck
 
 ## Versioning
 
-Current published version: `v0.1.1`.
+Current published version: `v0.1.5`.
 
 To freeze a new version:
 
 ```bash
+# 1. Refresh the staging copy from the version you are freezing
+rm -rf docs i18n/zh-CN/docusaurus-plugin-content-docs/current
+cp -R versioned_docs/version-v0.1.5 docs
+cp -R i18n/zh-CN/docusaurus-plugin-content-docs/version-v0.1.5 i18n/zh-CN/docusaurus-plugin-content-docs/current
+
+# 2. Cut the version from the staging copy
 npm run docusaurus docs:version <version-name>
 ```
 

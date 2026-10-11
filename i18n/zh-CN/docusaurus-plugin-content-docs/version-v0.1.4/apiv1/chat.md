@@ -317,7 +317,14 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 
 ## GET /api/v1/chat/rooms
 
-获取当前用户参与的所有聊天室列表，包含最近消息预览。
+分页获取当前用户参与的聊天室，包含最近消息预览。
+
+### 查询参数
+
+| 参数 | 类型 | 必填 | 默认值 | 描述 |
+|---|---|---|---|---|
+| `limit` | integer | 否 | 50 | 每页聊天室数量，范围为 1 到 100 |
+| `offset` | integer | 否 | 0 | 跳过的聊天室数量，不得为负数 |
 
 ### 请求
 
@@ -370,7 +377,10 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
         ],
         "last_message": null
       }
-    ]
+    ],
+    "has_more": false,
+    "limit": 50,
+    "offset": 0
   }
 }
 ```
@@ -378,6 +388,9 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 | 字段 | 类型 | 描述 |
 |---|---|---|
 | `data.rooms` | array | 聊天室数组，按创建时间倒序排列 |
+| `data.has_more` | boolean | 是否还有下一页聊天室 |
+| `data.limit` | integer | 本次响应采用的每页数量 |
+| `data.offset` | integer | 已跳过的聊天室数量 |
 
 每个聊天室对象：
 
@@ -402,11 +415,41 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 | `sender_username` | string | 发送者用户名 |
 | `created_at` | string (RFC 3339) | 消息时间戳 |
 
+#### 错误响应
+
+**聊天室分页数量无效**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Room page limit must be between 1 and 100.",
+  "data": null
+}
+```
+
+**聊天室分页偏移量为负数**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Room page offset cannot be negative.",
+  "data": null
+}
+```
+
 ### 说明
 
 - 源码位置：`src/chat/room.rs`
-- 聊天室按 `created_at` 倒序返回
+- 聊天室按 `created_at` 倒序返回，时间相同时按聊天室标识排序
+- 仅为当前页读取成员列表和最近消息预览
 - `last_message` 通过 lateral join 查询获取，无消息时为 `null`
+- 普通聊天室最近一条消息为文件时，`last_message.content` 是 `File: ` 加文件名。
 
 ---
 
@@ -902,7 +945,7 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 
 | 参数 | 类型 | 必填 | 默认值 | 描述 |
 |---|---|---|---|---|
-| `limit` | integer | 否 | 50 | 返回消息数量上限（最大 100） |
+| `limit` | integer | 否 | 50 | 返回消息数量必须为正数，最大限制为 100 |
 | `before` | string (UUID v7) | 否 | - | 游标：获取此消息 ID 之前的更早消息 |
 
 ### 请求
@@ -927,6 +970,7 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
         "room_id": "019ef520-0c59-7902-9959-86975c24af39",
         "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
         "content": "Hello, Bob!",
+        "file": null,
         "created_at": "2026-06-23T15:35:27.871353+00:00"
       }
     ],
@@ -942,7 +986,17 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 | `data.has_more` | boolean | 是否还有更早的消息 |
 | `data.next_cursor` | string (UUID v7) \| null | 用于获取下一页消息的游标（消息 ID），没有更多消息时为 null |
 
-每个消息对象包含 `id`、`room_id`、`sender_id`、`content`、`created_at` 字段。
+每个消息对象包含 `id`、`room_id`、`sender_id`、`content`（加密聊天室为 `ciphertext`）、`file`、`created_at` 字段。文本消息的 `file` 为 `null`；文件消息的文本为 `null`，`file` 为以下对象：
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `file.sha256` | string | 存储字节的哈希 |
+| `file.name` | string | 原始名称；加密聊天室为 `encrypted-file` |
+| `file.media_type` | string | 上传的媒体类型；加密聊天室为 `application/octet-stream` |
+| `file.byte_size` | integer | 存储字节数 |
+| `file.encrypted` | boolean | 聊天室是否要求加密上传 |
+| `file.encrypted_metadata` | string \| null | 供客户端解密的不透明元数据 |
+| `file.download_url` | string | 需要认证的下载路径 |
 
 #### 错误响应
 
@@ -972,6 +1026,19 @@ Token 通过 `POST /api/v1/user/login` 获取，详情见[用户文档](./user.m
 }
 ```
 
+**消息分页数量无效**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Message page limit must be at least 1.",
+  "data": null
+}
+```
+
 ### 分页用法
 
 首次请求获取最新消息：
@@ -992,6 +1059,345 @@ GET /api/v1/chat/rooms/{room_id}/messages?limit=50&before={next_cursor}
 
 - 源码位置：`src/chat/message.rs`
 - 消息按创建时间**倒序**返回（最新的在前）
+
+---
+
+## POST /api/v1/chat/rooms/&#123;room_id&#125;/files
+
+向聊天室发送一个文件消息。需要认证。服务端把文件字节保存在本地，验证客户端提供的 SHA-256 哈希，并对相同字节只保存一份。
+
+### 路径参数
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `room_id` | string (UUID v7) | 目标聊天室 |
+
+### 请求
+
+使用 `multipart/form-data`，包含以下字段：
+
+| 字段 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `file` | binary | 是 | 一个非空文件；逻辑文件大小受 `file.max_bytes` 限制，默认 5 GiB |
+| `sha256` | string | 是 | 上传字节的 SHA-256 哈希，64 位十六进制字符串 |
+| `encrypted_metadata` | string | 仅加密聊天室 | 文件元数据的加密内容，以 Base64 编码，包含随机数和认证标签 |
+
+在活跃的加密私聊会话中，客户端必须先用会话密钥加密文件及元数据，再上传。使用 AES-256-GCM，为每项数据生成新的 12 字节随机数，上传格式为 `随机数 || 密文 || 16 字节认证标签`。元数据明文可以包含原始文件名和媒体类型。计算上传密文字节的哈希，而不是明文哈希。服务端验证哈希和密文长度，但无法证明客户端确实执行了加密。加密文件的公开元数据固定为 `encrypted-file` 和 `application/octet-stream`，客户端解密 `encrypted_metadata` 后才能显示原始元数据。
+
+### 响应
+
+#### 成功响应
+
+- HTTP 状态码：`201 Created`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "SUCCESS",
+  "message": "File sent successfully.",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "content": null,
+    "file": {
+      "sha256": "0a15b5d51b4969aef3cdefb1f5567fa684ad43f9045ae01a933fe024af3db12b",
+      "name": "report.pdf",
+      "media_type": "application/pdf",
+      "byte_size": 4096,
+      "encrypted": false,
+      "encrypted_metadata": null,
+      "download_url": "/api/v1/chat/rooms/019ef520-0c59-7902-9959-86975c24af39/files/019ef550-0c59-7902-9959-86975c24af39"
+    },
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| 字段 | 类型 | 描述 |
+|---|---|---|
+| `data.id` | string (UUID v7) | 文件消息标识 |
+| `data.file.sha256` | string | 存储字节的哈希 |
+| `data.file.name` | string | 原始名称；加密聊天室为 `encrypted-file` |
+| `data.file.media_type` | string | 上传的媒体类型；加密聊天室为 `application/octet-stream` |
+| `data.file.byte_size` | integer | 存储字节数 |
+| `data.file.encrypted` | boolean | 聊天室是否要求加密上传 |
+| `data.file.encrypted_metadata` | string \| null | 供客户端解密的不透明元数据 |
+| `data.file.download_url` | string | 需要认证的下载路径 |
+
+#### 错误响应
+
+下列错误均使用标准响应结构。生产环境隐藏数据库及存储故障的详细信息。
+
+**文件无效**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Verification failed: File hash does not match uploaded bytes.",
+  "data": null
+}
+```
+
+**表单格式错误**
+
+- HTTP 状态码：`400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "BAD_REQUEST_ERROR",
+  "message": "Request information error: Failed to read multipart field: malformed body.",
+  "data": null
+}
+```
+
+**缺少认证信息**
+
+- HTTP 状态码：`401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "AUTHENTICATION_ERROR",
+  "message": "Authentication failed: Missing authorization header.",
+  "data": null
+}
+```
+
+**不是聊天室成员**
+
+- HTTP 状态码：`403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "FORBIDDEN_ERROR",
+  "message": "Insufficient permissions: You are not a member of this room.",
+  "data": null
+}
+```
+
+**聊天室不存在**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "NOT_FOUND_ERROR",
+  "message": "Not found: Room not found.",
+  "data": null
+}
+```
+
+**加密会话未激活**
+
+- HTTP 状态码：`409 Conflict`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "CONFLICT_ERROR",
+  "message": "Conflict: No active encrypted session in this room.",
+  "data": null
+}
+```
+
+**请求过大**
+
+- HTTP 状态码：`413 Payload Too Large`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "PAYLOAD_TOO_LARGE_ERROR",
+  "message": "Request body too large: File exceeds the configured file size.",
+  "data": null
+}
+```
+
+当发送者的逻辑文件总量将超过 `file.per_user_quota_bytes` 时，也返回相同状态码和响应代码，消息为 `File storage quota exceeded.`。
+
+**上传停滞**
+
+- HTTP 状态码：`408 Request Timeout`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "REQUEST_TIMEOUT_ERROR",
+  "message": "Request timed out: The file upload received no data for 30 seconds.",
+  "data": null
+}
+```
+
+**同时上传数量过多**
+
+- HTTP 状态码：`429 Too Many Requests`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "RATE_LIMIT_ERROR",
+  "message": "Too many requests: Too many file uploads are already in progress.",
+  "data": null
+}
+```
+
+**数据库故障**
+
+- HTTP 状态码：`500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "DATABASE_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+**存储故障**
+
+- HTTP 状态码：`500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+### 说明
+
+- 源码位置：`src/chat/file.rs`
+- 上传成功后会创建消息，并通过 WebSocket 广播 `new_file` 事件，`data` 与成功响应相同。
+- 文件上传会一边计算 SHA-256，一边流式写入临时本地文件，服务端不会把整个文件保存在内存中。
+- `web.max_body_size` 仍用于普通 HTTP 请求体。文件上传请求体使用 `file.max_bytes`。
+- 文件上传请求不受 `web.request_timeout_secs` 限制。`file.upload_idle_timeout_secs` 默认为 30 秒，每收到一个新的分片便重新计时。上传停止发送数据时，服务器返回 `408 Request Timeout`。
+- `file.per_user_quota_bytes` 默认限制每个发送者的逻辑文件消息总量为 50 GiB。即使相同内容在磁盘中只保存一份，重复发送的消息仍分别计入配额。`file.maximum_concurrent_uploads_per_user` 默认为 2。
+- 服务器在写入上传文件前检查剩余逻辑配额，并在保存消息前持有每用户数据库锁再次检查。
+- 设置 `file.transfer_rate_limit_enabled = true`，并配置 `file.upload_mibps` 与 `file.download_mibps` 后，可以限制文件传输速度。速率单位是 mebibits per second。
+- 不同聊天室的相同字节只存储一份。数据库引用计数跟踪文件消息，包括聊天室级联删除；计数归零才删除文件。删除失败的文件、没有数据库记录的完成文件和临时上传文件会在服务启动时清理。
+
+---
+
+## GET /api/v1/chat/rooms/&#123;room_id&#125;/files/&#123;message_id&#125;
+
+下载已保存的文件字节。需要认证，并且当前用户必须是聊天室成员。
+
+### 路径参数
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `room_id` | string (UUID v7) | 聊天室标识 |
+| `message_id` | string (UUID v7) | 文件消息标识 |
+
+### 请求
+
+无请求体。
+
+### 响应
+
+#### 成功响应
+
+- HTTP 状态码：`200 OK`
+- 响应体为流式原始字节，并带有 `Content-Length`、`Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。
+- 非加密文件使用保存的 `Content-Type`，并返回 `Content-Disposition: attachment; filename*=UTF-8''{encoded_name}`。
+- 加密文件使用 `Content-Type: application/octet-stream` 和公开名称 `encrypted-file`。
+
+#### 错误响应
+
+下列错误均使用标准响应结构。生产环境隐藏数据库及存储故障的详细信息。
+
+**缺少认证信息**
+
+- HTTP 状态码：`401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "AUTHENTICATION_ERROR",
+  "message": "Authentication failed: Missing authorization header.",
+  "data": null
+}
+```
+
+**不是聊天室成员**
+
+- HTTP 状态码：`403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "FORBIDDEN_ERROR",
+  "message": "Insufficient permissions: You are not a member of this room.",
+  "data": null
+}
+```
+
+**聊天室不存在**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "NOT_FOUND_ERROR",
+  "message": "Not found: Room not found.",
+  "data": null
+}
+```
+
+**文件不存在**
+
+- HTTP 状态码：`404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "NOT_FOUND_ERROR",
+  "message": "Not found: File not found.",
+  "data": null
+}
+```
+
+**数据库故障**
+
+- HTTP 状态码：`500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "DATABASE_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+**存储故障**
+
+- HTTP 状态码：`500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+### 说明
+
+- 源码位置：`src/chat/file.rs`
+- 加密文件下载得到的是密文，客户端需要使用会话密钥解密并验证。
 
 ---
 
@@ -1040,6 +1446,7 @@ Authorization: Bearer <token>
 
 - 源码位置：`src/websocket/handler.rs`
 - 只有在 JWT 验证和用户查询成功后，才会升级 WebSocket 连接
+- 没有活跃 WebSocket 订阅者的聊天室广播会被忽略；客户端断开连接或重连期间可能暂时没有订阅者。
 
 #### GET /websocket
 
@@ -1365,6 +1772,32 @@ Authorization: Bearer <token>
 | `data.content` | string | 消息内容 |
 | `data.created_at` | string (RFC 3339) | 消息时间戳 |
 
+#### new_file
+
+文件上传成功后广播。`data` 与上文 `POST /files` 成功响应中的 `data` 对象一致。
+
+```json
+{
+  "type": "new_file",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "content": null,
+    "file": {
+      "sha256": "0a15b5d51b4969aef3cdefb1f5567fa684ad43f9045ae01a933fe024af3db12b",
+      "name": "report.pdf",
+      "media_type": "application/pdf",
+      "byte_size": 4096,
+      "encrypted": false,
+      "encrypted_metadata": null,
+      "download_url": "/api/v1/chat/rooms/019ef520-0c59-7902-9959-86975c24af39/files/019ef550-0c59-7902-9959-86975c24af39"
+    },
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
 #### user_online
 
 当用户上线（第一个连接建立）时向聊天室所有成员广播。
@@ -1579,7 +2012,7 @@ Authorization: Bearer <token>
 
 #### encrypt_partner_disconnected
 
-加密会话中对方离线时发送。会话进入 30 秒宽限期。
+加密会话中对方离线时发送。会话默认进入 30 秒宽限期。管理员可以在 `config.toml` 中设置 `websocket.encrypted_grace_period_secs`，或通过环境变量 `BAIHUA_ENCRYPTED_GRACE_PERIOD_SECS` 设置正整数秒数。
 
 ```json
 {

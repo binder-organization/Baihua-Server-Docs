@@ -22,7 +22,7 @@ Private rooms support end-to-end encrypted messaging. The encryption protocol us
 
 ## Disconnection Handling
 
-When a user disconnects during an active encrypted session, the server starts a **30-second grace period** and notifies the remaining user via `encrypt_partner_disconnected`. If the user reconnects within the grace period, the session resumes. Otherwise, the session is terminated, all encrypted messages are deleted, and `encrypt_session_ended` is broadcast.
+When a user disconnects during an active encrypted session, the server starts a **30-second grace period by default** and notifies the remaining user via `encrypt_partner_disconnected`. The server administrator can set `websocket.encrypted_grace_period_secs` in `config.toml` or override it with `BAIHUA_ENCRYPTED_GRACE_PERIOD_SECS` (a positive number of seconds). If the user reconnects within the grace period, the session resumes. Otherwise, the session is terminated, all encrypted messages are deleted, and `encrypt_session_ended` is broadcast.
 
 ## Source Code
 

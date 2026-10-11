@@ -22,7 +22,7 @@ sidebar_label: 加密聊天
 
 ## 断线处理
 
-当用户在活跃加密会话中断开连接时，服务器启动 **30 秒宽限期**并通过 `encrypt_partner_disconnected` 通知另一方。若用户在宽限期内重新连接，会话继续。否则会话终止，所有加密消息被删除，并广播 `encrypt_session_ended`。
+当用户在活跃加密会话中断开连接时，服务器默认启动 **30 秒宽限期**并通过 `encrypt_partner_disconnected` 通知另一方。管理员可以在 `config.toml` 中设置 `websocket.encrypted_grace_period_secs`，或使用环境变量 `BAIHUA_ENCRYPTED_GRACE_PERIOD_SECS` 覆盖；取值必须是正整数秒。若用户在宽限期内重新连接，会话继续。否则会话终止，所有加密消息被删除，并广播 `encrypt_session_ended`。
 
 ## 源码位置
 

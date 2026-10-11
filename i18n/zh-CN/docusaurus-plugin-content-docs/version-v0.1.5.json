@@ -1,0 +1,74 @@
+{
+  "sidebar.docs.doc.overview": {
+    "message": "概览",
+    "description": "The label for the doc item Overview in sidebar docs"
+  },
+  "sidebar.docs.category.Getting Started": {
+    "message": "快速开始",
+    "description": "The label for category 'Getting Started' in sidebar 'docs'"
+  },
+  "sidebar.docs.doc.quick-start": {
+    "message": "快速启动",
+    "description": "The label for doc quick-start in sidebar docs"
+  },
+  "sidebar.docs.doc.deployment": {
+    "message": "生产部署",
+    "description": "The label for doc deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Guides": {
+    "message": "指南",
+    "description": "The label for category 'Guides' in sidebar 'docs'"
+  },
+  "sidebar.docs.doc.contributing": {
+    "message": "贡献指南",
+    "description": "The label for doc contributing in sidebar docs"
+  },
+  "sidebar.docs.doc.code-of-conduct": {
+    "message": "行为准则",
+    "description": "The label for doc code-of-conduct in sidebar docs"
+  },
+  "sidebar.docs.doc.security": {
+    "message": "安全政策",
+    "description": "The label for doc security in sidebar docs"
+  },
+  "sidebar.docs.category.API Reference": {
+    "message": "API 文档",
+    "description": "The label for category 'API Reference' in sidebar 'docs'"
+  },
+  "sidebar.docs.doc.apiv1/TEMPLATE": {
+    "message": "API 概览",
+    "description": "The label for doc apiv1/TEMPLATE in sidebar docs"
+  },
+  "sidebar.docs.doc.apiv1/health": {
+    "message": "健康检查",
+    "description": "The label for doc apiv1/health in sidebar docs"
+  },
+  "sidebar.docs.doc.apiv1/greet": {
+    "message": "问候",
+    "description": "The label for doc apiv1/greet in sidebar docs"
+  },
+  "sidebar.docs.doc.apiv1/user": {
+    "message": "用户",
+    "description": "The label for doc apiv1/user in sidebar docs"
+  },
+  "sidebar.docs.doc.apiv1/chat": {
+    "message": "聊天",
+    "description": "The label for doc apiv1/chat in sidebar docs"
+  },
+  "sidebar.docs.doc.changelog": {
+    "message": "更新日志",
+    "description": "The label for doc changelog in sidebar docs"
+  },
+  "version.label": {
+    "message": "v0.1.5",
+    "description": "The label for version v0.1.5"
+  },
+  "sidebar.docs.doc.Overview": {
+    "message": "Overview",
+    "description": "The label for the doc item 'Overview' in sidebar 'docs', linking to the doc overview"
+  },
+  "sidebar.docs.doc.Changelog": {
+    "message": "Changelog",
+    "description": "The label for the doc item 'Changelog' in sidebar 'docs', linking to the doc changelog"
+  }
+}

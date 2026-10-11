@@ -261,7 +261,7 @@ Authenticate a user and receive a JWT token.
 | `iat` | Issued-at timestamp (Unix epoch) |
 | `exp` | Expiration timestamp (Unix epoch) |
 
-**Development behavior:** The token is logged for debugging convenience.
+**Security note:** The server never writes the issued token to logs.
 
 **Production behavior:** The token is **never** written to logs.
 
@@ -815,7 +815,7 @@ Search for users by username substring or exact user ID.
 |---|---|---|---|---|
 | `username` | string | Conditional | - | Username substring to search (case-insensitive) |
 | `user_id` | string (UUID v7) | Conditional | - | Exact user ID to look up |
-| `limit` | integer | No | 20 | Maximum number of results (max 50) |
+| `limit` | integer | No | 20 | Maximum number of results; must be positive and is capped at 50 |
 | `offset` | integer | No | 0 | Number of results to skip |
 
 Either `username` or `user_id` must be provided.
@@ -884,11 +884,25 @@ Each user object:
 }
 ```
 
+**Invalid search page limit**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Search page limit must be at least 1.",
+  "data": null
+}
+```
+
 ### Notes
 
 - Source: `src/user/search.rs`
 - Only returns active users (`is_active = true`)
 - Username search is case-insensitive and uses substring matching
+- A trigram index supports substring search for active users when the search term is selective
 - Only public profile fields are returned (no email, phone number, or token version)
 
 ---

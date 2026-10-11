@@ -14,7 +14,7 @@ sidebar_label: API 概览
 | 单一功能组（如 user、chat） | `<名称>.md` — 例如 `user.md`、`chat.md` |
 | 独立端点（如 greet、health） | `<名称>.md` — 例如 `greet.md`、`health.md` |
 
-将文件放入 `docs/zh-CN/apiv1/` 目录，并在 `docs/en/apiv1/` 中创建对应的英文版本。
+将文件放入 `i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/apiv1/` 目录，并在 `versioned_docs/version-<version>/apiv1/` 中创建对应的英文版本。
 
 ---
 
@@ -42,7 +42,7 @@ Authorization: Bearer <token>
 
 - HTTP 状态码：`401 Unauthorized`
 
-| `error_code` | message | 条件 |
+| `code` | message | 条件 |
 |---|---|---|
 
 所有认证错误共享相同的响应格式：
@@ -50,7 +50,7 @@ Authorization: Bearer <token>
 ```json
 {
   "response_id": "uuid-v7-string",
-  "error_code": "AUTHENTICATION_ERROR",
+  "code": "AUTHENTICATION_ERROR",
   "message": "错误描述。",
   "data": null
 }
@@ -104,7 +104,7 @@ Authorization: Bearer <token>
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
+  "code": "SUCCESS",
   "message": "成功消息。",
   "data": { ... }
 }
@@ -129,7 +129,7 @@ Authorization: Bearer <token>
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "ERROR_CODE",
+  "code": "ERROR_CODE",
   "message": "错误描述。",
   "data": null
 }
@@ -150,7 +150,7 @@ Authorization: Bearer <token>
 ```json
 {
   "response_id": "uuid-v7-string",
-  "error_code": "ERROR_CODE",
+  "code": "ERROR_CODE",
   "message": "人类可读的错误信息。",
   "data": null
 }
@@ -158,7 +158,7 @@ Authorization: Bearer <token>
 
 ### 全局错误码
 
-| HTTP 状态码 | `error_code` | 描述 | 来源 |
+| HTTP 状态码 | `code` | 描述 | 来源 |
 |---|---|---|---|
 
 ---
@@ -171,7 +171,7 @@ Authorization: Bearer <token>
 - 禁止更深层嵌套。
 
 ### 语言对照
-`docs/zh-CN/apiv1/` 中的每个中文文档，都必须在 `docs/en/apiv1/` 中有结构相同的英文对应版本。
+`i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/apiv1/` 中的每个中文文档，都必须在 `versioned_docs/version-<version>/apiv1/` 中有结构相同的英文对应版本。两者都需要在 `sidebars.ts` 中注册（英文）——中文侧边栏由其生成。
 
 ### 中文文档标题对照表
 
@@ -190,7 +190,7 @@ Authorization: Bearer <token>
 
 ### JSON 代码块
 - 中英文版本使用相同的 JSON 示例值（不要翻译 JSON 内容）。
-- 错误 JSON 必须包含 `response_id`、`error_code`、`message` 和 `data: null`。
+- 错误 JSON 必须包含 `response_id`、`code`、`message` 和 `data: null`。
 - 使用真实的 UUID v7 值作为 response_id 和实体 ID（例如 `019ef520-...`）。
 
 ### 字段表格
@@ -211,3 +211,17 @@ Authorization: Bearer <token>
 - 每个 `### 说明` / `### Notes` 章节**必须**包含源码位置：
   - 英文：`- Source: \`src/path/to/file.rs\``
   - 中文：`- 源码位置：\`src/path/to/file.rs\``
+
+---
+
+## 4. 参考示例
+
+可参考已有文档：
+
+| 端点 | 文件 |
+|---|---|
+| 简单（无鉴权、无请求体） | `greet.md` |
+| 简单（公开、无鉴权、依赖数据库） | `health.md` |
+| 简单（需要鉴权） | `user.md`（`GET /api/v1/user/me/logout`） |
+| 复杂（鉴权、多端点、错误响应） | `user.md` |
+| 复杂（鉴权、路径/查询参数、游标分页） | `chat.md` |

@@ -317,7 +317,14 @@ Create a chat room. The behavior depends on the `is_group` field:
 
 ## GET /api/v1/chat/rooms
 
-List all chat rooms the authenticated user is a member of, with optional last-message preview.
+List the authenticated user's chat rooms one page at a time, with optional last-message previews.
+
+### Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `limit` | integer | No | 50 | Rooms per page, from 1 to 100 |
+| `offset` | integer | No | 0 | Number of rooms to skip; must be nonnegative |
 
 ### Request
 
@@ -370,7 +377,10 @@ No request body.
         ],
         "last_message": null
       }
-    ]
+    ],
+    "has_more": false,
+    "limit": 50,
+    "offset": 0
   }
 }
 ```
@@ -378,6 +388,9 @@ No request body.
 | Field | Type | Description |
 |---|---|---|
 | `data.rooms` | array | Array of rooms, ordered by creation date descending |
+| `data.has_more` | boolean | Whether another page of rooms is available |
+| `data.limit` | integer | Page size used for this response |
+| `data.offset` | integer | Number of rooms skipped |
 
 Each room object:
 
@@ -402,11 +415,41 @@ The `last_message` object:
 | `sender_username` | string | Username of the sender |
 | `created_at` | string (RFC 3339) | Message timestamp |
 
+#### Errors
+
+**Invalid room page limit**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Room page limit must be between 1 and 100.",
+  "data": null
+}
+```
+
+**Negative room page offset**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Room page offset cannot be negative.",
+  "data": null
+}
+```
+
 ### Notes
 
 - Source: `src/chat/room.rs`
-- Rooms are returned in descending order by `created_at`
+- Rooms are returned in descending order by `created_at`, with room ID breaking ties
+- Member lists and last-message previews are loaded only for the requested page
 - `last_message` is fetched via a lateral join and is `null` for rooms with no messages
+- When the latest message is a file in a regular room, `last_message.content` is `File: ` followed by its stored name.
 
 ---
 
@@ -902,7 +945,7 @@ Retrieve historical messages from a chat room with cursor-based pagination.
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `limit` | integer | No | 50 | Maximum number of messages to return (max 100) |
+| `limit` | integer | No | 50 | Maximum number of messages to return; must be positive and is capped at 100 |
 | `before` | string (UUID v7) | No | - | Cursor: fetch messages older than this message ID |
 
 ### Request
@@ -927,6 +970,7 @@ No request body.
         "room_id": "019ef520-0c59-7902-9959-86975c24af39",
         "sender_id": "019ef520-0c59-7902-9959-86975c24af39",
         "content": "Hello, Bob!",
+        "file": null,
         "created_at": "2026-06-23T15:35:27.871353+00:00"
       }
     ],
@@ -942,7 +986,17 @@ No request body.
 | `data.has_more` | boolean | Whether there are more messages before the returned set |
 | `data.next_cursor` | string (UUID v7) \| null | Cursor to use for fetching the next page; null if no more messages |
 
-Each message object contains `id`, `room_id`, `sender_id`, `content`, and `created_at`.
+Each message object contains `id`, `room_id`, `sender_id`, `content` (or `ciphertext` in an encrypted room), `file`, and `created_at`. `file` is `null` for text messages. File messages have null text and a file object:
+
+| Field | Type | Description |
+|---|---|---|
+| `file.sha256` | string | Hash of stored bytes |
+| `file.name` | string | Original name, or `encrypted-file` for encrypted rooms |
+| `file.media_type` | string | Supplied media type, or `application/octet-stream` for encrypted rooms |
+| `file.byte_size` | integer | Stored byte count |
+| `file.encrypted` | boolean | Whether the room requires encrypted uploads |
+| `file.encrypted_metadata` | string \| null | Opaque encrypted metadata for the client |
+| `file.download_url` | string | Authenticated file download path |
 
 #### Errors
 
@@ -972,6 +1026,19 @@ Each message object contains `id`, `room_id`, `sender_id`, `content`, and `creat
 }
 ```
 
+**Invalid message page limit**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Message page limit must be at least 1.",
+  "data": null
+}
+```
+
 ### Pagination Usage
 
 Fetch the most recent messages:
@@ -992,6 +1059,345 @@ When `has_more` is `false` or `next_cursor` is `null`, there are no more message
 
 - Source: `src/chat/message.rs`
 - Messages are returned in **descending** order (newest first)
+
+---
+
+## POST /api/v1/chat/rooms/&#123;room_id&#125;/files
+
+Send one file as a room message. Authentication is required. The server stores file bytes locally, verifies the supplied SHA-256 hash, and keeps one disk copy for identical bytes.
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `room_id` | string (UUID v7) | Destination room |
+
+### Request
+
+Use `multipart/form-data` with these fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file` | binary | Yes | One nonempty file; logical file size is limited by `file.max_bytes` (5 GiB by default) |
+| `sha256` | string | Yes | 64 hexadecimal characters representing the SHA-256 digest of the exact uploaded bytes |
+| `encrypted_metadata` | string | Encrypted rooms only | Base64 of encrypted metadata, including its nonce and authentication tag |
+
+For an active encrypted private session, the client must encrypt the file and metadata with its session key before upload. Use AES-256-GCM with a fresh 12-byte nonce for each value and upload `nonce || ciphertext || 16-byte authentication tag`. The metadata plaintext can contain the original name and media type. Hash the uploaded ciphertext bytes, not the plaintext. The server checks the hash and ciphertext shape but cannot verify that the client actually encrypted the content. Encrypted files appear as `encrypted-file` with `application/octet-stream` metadata until the client decrypts `encrypted_metadata`.
+
+### Response
+
+#### Success
+
+- HTTP Status: `201 Created`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "SUCCESS",
+  "message": "File sent successfully.",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "content": null,
+    "file": {
+      "sha256": "0a15b5d51b4969aef3cdefb1f5567fa684ad43f9045ae01a933fe024af3db12b",
+      "name": "report.pdf",
+      "media_type": "application/pdf",
+      "byte_size": 4096,
+      "encrypted": false,
+      "encrypted_metadata": null,
+      "download_url": "/api/v1/chat/rooms/019ef520-0c59-7902-9959-86975c24af39/files/019ef550-0c59-7902-9959-86975c24af39"
+    },
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.id` | string (UUID v7) | File message identifier |
+| `data.file.sha256` | string | Hash of stored bytes |
+| `data.file.name` | string | Original name, or `encrypted-file` for encrypted rooms |
+| `data.file.media_type` | string | Supplied media type, or `application/octet-stream` for encrypted rooms |
+| `data.file.byte_size` | integer | Stored byte count |
+| `data.file.encrypted` | boolean | Whether the room requires encrypted uploads |
+| `data.file.encrypted_metadata` | string \| null | Opaque encrypted metadata for the client |
+| `data.file.download_url` | string | Authenticated file download path |
+
+#### Errors
+
+Each error below uses the standard response envelope. Storage and database details are hidden in production.
+
+**Invalid file**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "VALIDATION_ERROR",
+  "message": "Verification failed: File hash does not match uploaded bytes.",
+  "data": null
+}
+```
+
+**Malformed form**
+
+- HTTP Status: `400 Bad Request`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "BAD_REQUEST_ERROR",
+  "message": "Request information error: Failed to read multipart field: malformed body.",
+  "data": null
+}
+```
+
+**Missing authentication**
+
+- HTTP Status: `401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "AUTHENTICATION_ERROR",
+  "message": "Authentication failed: Missing authorization header.",
+  "data": null
+}
+```
+
+**Not a room member**
+
+- HTTP Status: `403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "FORBIDDEN_ERROR",
+  "message": "Insufficient permissions: You are not a member of this room.",
+  "data": null
+}
+```
+
+**Room not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "NOT_FOUND_ERROR",
+  "message": "Not found: Room not found.",
+  "data": null
+}
+```
+
+**Encrypted session inactive**
+
+- HTTP Status: `409 Conflict`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "CONFLICT_ERROR",
+  "message": "Conflict: No active encrypted session in this room.",
+  "data": null
+}
+```
+
+**Request too large**
+
+- HTTP Status: `413 Payload Too Large`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "PAYLOAD_TOO_LARGE_ERROR",
+  "message": "Request body too large: File exceeds the configured file size.",
+  "data": null
+}
+```
+
+The same status and response code are returned with `File storage quota exceeded.` when the sender's logical file total would exceed `file.per_user_quota_bytes`.
+
+**Upload stalled**
+
+- HTTP Status: `408 Request Timeout`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "REQUEST_TIMEOUT_ERROR",
+  "message": "Request timed out: The file upload received no data for 30 seconds.",
+  "data": null
+}
+```
+
+**Too many concurrent uploads**
+
+- HTTP Status: `429 Too Many Requests`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "RATE_LIMIT_ERROR",
+  "message": "Too many requests: Too many file uploads are already in progress.",
+  "data": null
+}
+```
+
+**Database failure**
+
+- HTTP Status: `500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "DATABASE_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+**Storage failure**
+
+- HTTP Status: `500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/chat/file.rs`
+- A successful upload creates a message and broadcasts a `new_file` WebSocket event with the same `data` object.
+- File uploads are streamed to a temporary local file while the SHA-256 hash is computed, so the server does not keep the whole file in memory.
+- `web.max_body_size` still limits ordinary HTTP request bodies. File upload bodies use `file.max_bytes` instead.
+- File upload requests are exempt from `web.request_timeout_secs`. `file.upload_idle_timeout_secs` defaults to 30 seconds and resets each time another multipart chunk arrives. An upload that stops sending data receives `408 Request Timeout`.
+- `file.per_user_quota_bytes` defaults to 50 GiB of logical file messages for each sender. Repeated messages count repeatedly even when content-addressed storage deduplicates their bytes. `file.maximum_concurrent_uploads_per_user` defaults to 2.
+- The server checks the remaining logical quota before writing upload bytes and checks again under a per-user database lock before saving the message.
+- Set `file.transfer_rate_limit_enabled = true` with `file.upload_mibps` and `file.download_mibps` to throttle file transfers. The rate unit is mebibits per second.
+- Identical bytes are stored once across rooms. A database reference count tracks file messages, including cascading room deletion. The file is removed only when the count reaches zero; failed removals, orphan completed files, and temporary upload files are cleaned when the server starts.
+
+---
+
+## GET /api/v1/chat/rooms/&#123;room_id&#125;/files/&#123;message_id&#125;
+
+Download the stored file bytes. Authentication and current room membership are required.
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `room_id` | string (UUID v7) | Room identifier |
+| `message_id` | string (UUID v7) | File message identifier |
+
+### Request
+
+No request body.
+
+### Response
+
+#### Success
+
+- HTTP Status: `200 OK`
+- Body: streamed raw bytes with `Content-Length`, `Cache-Control: no-store`, and `X-Content-Type-Options: nosniff`.
+- Non-encrypted files use their stored `Content-Type` and `Content-Disposition: attachment; filename*=UTF-8''{encoded_name}`.
+- Encrypted files use `Content-Type: application/octet-stream` and the stored public name `encrypted-file`.
+
+#### Errors
+
+Each error below uses the standard response envelope. Storage and database details are hidden in production.
+
+**Missing authentication**
+
+- HTTP Status: `401 Unauthorized`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "AUTHENTICATION_ERROR",
+  "message": "Authentication failed: Missing authorization header.",
+  "data": null
+}
+```
+
+**Not a room member**
+
+- HTTP Status: `403 Forbidden`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "FORBIDDEN_ERROR",
+  "message": "Insufficient permissions: You are not a member of this room.",
+  "data": null
+}
+```
+
+**Room not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "NOT_FOUND_ERROR",
+  "message": "Not found: Room not found.",
+  "data": null
+}
+```
+
+**File not found**
+
+- HTTP Status: `404 Not Found`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "NOT_FOUND_ERROR",
+  "message": "Not found: File not found.",
+  "data": null
+}
+```
+
+**Database failure**
+
+- HTTP Status: `500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "DATABASE_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+**Storage failure**
+
+- HTTP Status: `500 Internal Server Error`
+
+```json
+{
+  "response_id": "019ef520-0c59-7902-9959-86975c24af39",
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "An internal error occurred. Please try again later.",
+  "data": null
+}
+```
+
+### Notes
+
+- Source: `src/chat/file.rs`
+- Encrypted downloads return ciphertext. Clients must decrypt and authenticate it with their session key.
 
 ---
 
@@ -1040,6 +1446,7 @@ If authentication fails, the server responds before the WebSocket upgrade occurs
 
 - Source: `src/websocket/handler.rs`
 - The connection is upgraded only after JWT validation and user lookup succeed
+- Broadcasts to rooms with no active WebSocket subscribers are ignored; clients may temporarily have no subscriber while disconnected or reconnecting.
 
 #### GET /websocket
 
@@ -1365,6 +1772,32 @@ Broadcast when a new message is sent via WebSocket `send_message`. All members s
 | `data.content` | string | Message content |
 | `data.created_at` | string (RFC 3339) | Message timestamp |
 
+#### new_file
+
+Broadcast after a successful file upload. `data` matches the `POST /files` success `data` object above.
+
+```json
+{
+  "type": "new_file",
+  "data": {
+    "id": "019ef550-0c59-7902-9959-86975c24af39",
+    "room_id": "019ef520-0c59-7902-9959-86975c24af39",
+    "sender_id": "019ef530-0c59-7902-9959-86975c24af39",
+    "content": null,
+    "file": {
+      "sha256": "0a15b5d51b4969aef3cdefb1f5567fa684ad43f9045ae01a933fe024af3db12b",
+      "name": "report.pdf",
+      "media_type": "application/pdf",
+      "byte_size": 4096,
+      "encrypted": false,
+      "encrypted_metadata": null,
+      "download_url": "/api/v1/chat/rooms/019ef520-0c59-7902-9959-86975c24af39/files/019ef550-0c59-7902-9959-86975c24af39"
+    },
+    "created_at": "2026-06-23T15:35:27.871353+00:00"
+  }
+}
+```
+
 #### user_online
 
 Broadcast to all members of a room when a user comes online (first connection).
@@ -1581,7 +2014,7 @@ Broadcast when an encrypted session terminates.
 
 #### encrypt_partner_disconnected
 
-Sent when the other user in an encrypted session goes offline. The session enters a 30-second grace period.
+Sent when the other user in an encrypted session goes offline. The session enters a grace period of 30 seconds by default. The server administrator can set `websocket.encrypted_grace_period_secs` in `config.toml` or override it with the positive integer environment variable `BAIHUA_ENCRYPTED_GRACE_PERIOD_SECS`.
 
 ```json
 {

@@ -20,7 +20,7 @@ sidebar_label: 健康检查
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "OK",
+  "code": "SUCCESS",
   "message": "Service is healthy.",
   "data": {
     "status": "ok"
@@ -31,7 +31,7 @@ sidebar_label: 健康检查
 | 字段 | 类型 | 描述 |
 |---|---|---|
 | `response_id` | string | UUID v7，唯一标识此次请求 |
-| `error_code` | string | 固定为 `"OK"` |
+| `code` | string | 固定为 `"SUCCESS"` |
 | `message` | string | `"Service is healthy."` |
 | `data.status` | string | `"ok"` |
 
@@ -44,7 +44,7 @@ sidebar_label: 健康检查
 ```json
 {
   "response_id": "019ef520-0c59-7902-9959-86975c24af39",
-  "error_code": "INTERNAL_SERVER_ERROR",
+  "code": "INTERNAL_SERVER_ERROR",
   "message": "Database connection failed.",
   "data": null
 }

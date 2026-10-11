@@ -62,7 +62,7 @@ sidebar_label: 贡献指南
 
 1. **代码风格**：运行 `cargo fmt` 和 `cargo clippy --locked -- -D warnings` 格式化并检查代码。
 2. **集成测试**：运行 `python3 tests/run_tests.py` 执行完整的集成测试套件。详见下方的[测试](#测试)章节。
-3. **文档**：更新相关的文档，包括`/docs/`目录下的文档文件，根目录下的`README.md`文件等等。新增或修改 API 文档时，请使用 `docs/en/apiv1/TEMPLATE.md`（以及中文版本 `docs/zh-CN/apiv1/TEMPLATE.md`）中的模板，以保证格式统一。
+3. **文档**：更新相关的文档，包括`/docs/`目录下的文档文件，根目录下的`README.md`文件等等。新增或修改 API 文档时，请使用 `versioned_docs/version-<version>/apiv1/TEMPLATE.md` 中的英文模板（以及 `i18n/zh-CN/docusaurus-plugin-content-docs/version-<version>/apiv1/TEMPLATE.md` 中的中文版本），以保证格式统一。
 
 > [!CAUTION]
 > 请务必遵守上述规则，否则可能会被我们拒绝合并你的代码。
@@ -151,10 +151,14 @@ python3 tests/run_tests.py --keep
 如果本次提交目的是修改issue的话，需要在页脚引用该issue  
 
 以关键字Closes开头，比如  
-```Closes #234```
+```
+Closes #234
+```
 
 如果修改了多个bug，以逗号隔开  
-```Closes #123, #245, #992```  
+```
+Closes #123, #245, #992
+```
 
 
 当此次提交包含revert操作，类型以`revert:`开头，同时在正文中添加`This reverts commit [hash]`，其中hash值表示被回滚前的提交
